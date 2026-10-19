@@ -11,6 +11,8 @@ Flashcube is homebrew. Launch `flashcube.dol` from Swiss (or any other DOL loade
   - Each photo sits in a frame shaped like the photo.
   - Zoom up to 4x with L/R and move around with the stick.
   - Turn the photo, see its information, or mark it as a favourite.
+  - Delete it from the SD card (it asks first).
+  - Playtime opens the photo in the games.
   - A film strip shows the photos either side.
   - Z switches to full screen.
 - **Slideshow:**
@@ -33,6 +35,7 @@ Flashcube is homebrew. Launch `flashcube.dol` from Swiss (or any other DOL loade
   - **Opening animation:** turn it off to go straight to the cube.
   - **Menu music:** Flashcube's own background music, on or off.
   - **16:9:** the album, viewer and other screens spread out across the wide screen.
+  - **Software update:** checks GitHub for a newer Flashcube, shows what's new, and installs it (the old `.dol` is kept as `.old`). With *Check for updates at start* on, a gold tag on the cube says when there's a new version; press Z to see it.
   - **Exit button:** start another program (`sd:/boot.dol` unless you pick a different `.dol` from the card) or restart the console. B twice on the cube does the same.
 - **Long text** (file names, help text) scrolls back and forth when it doesn't fit.
 - **Sounds and music:** original menu sounds and a slow, airy background piece, all made by the GameCube itself as Flashcube runs. The music fades out while a song from the `midi` folder is playing.
@@ -48,6 +51,7 @@ sd:/midi/                 .mid songs for slideshows (shared with CubeBrowser),
                           plus an optional .sf2 SoundFont
 sd:/flashcube/            Flashcube's own data (made automatically):
     settings.ini, favorites.txt, index.dat, puzzle.txt
+    cacert.pem               certificates for the secure connection to GitHub
     thumbs/                  the thumbnail cache
 sd:/boot.dol              started by Exit (usually Swiss). Another .dol can be
                           chosen in Settings; if the chosen one is missing,
@@ -60,7 +64,7 @@ JPEG, PNG, BMP and GIF files are shown. The SD card can be in an SD2SP2 (Serial 
 
 | Where | Control |
 |---|---|
-| Cube | Stick: turn to a side · A: open it · B: turn back (on the front, B twice: exit) · START: Settings |
+| Cube | Stick: turn to a side · A: open it · B: turn back (on the front, B twice: exit) · START: Settings · Z: a new version, when there is one |
 | Album | Stick or D-pad: select · L/R: tabs · A: open · Y: slideshow · B: back |
 | Viewer | D-pad left/right: previous/next · D-pad up/down + A: photo menu · L/R: zoom · Stick or C-stick: move · Z: full screen · B: back |
 | Slideshow | A: pause · D-pad left/right: previous/next · X: music player · B: stop |
@@ -103,10 +107,12 @@ The phone must be on the same network.
 
 The GitHub Action (`.github/workflows/flashcube-libogc2.yml`) builds `flashcube.dol` on every push using the `ghcr.io/extremscorner/libogc2` Docker image. Download the `flashcube` artifact from the run.
 
+**Publishing a release** (so Flashcube's updater finds it): on GitHub, make a release with a tag like `v1.1` (matching `FC_VERSION` in `source/version.h`), put the notes in its description (they're shown on the TV), and attach a `.zip` of the artifact: `flashcube.dol` at the top and the `flashcube` folder beside it.
+
 To build by hand:
 
 ```
-sh get-deps.sh          # stb_image and stb_image_write into third_party/stb
+sh get-deps.sh          # stb_image, stb_image_write and mbedTLS into third_party/
 docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
 ```
 
@@ -120,6 +126,7 @@ docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
 ## Limits
 
 - **Progressive JPEGs and PNGs:** these can only be opened up to about 2 megapixels, because there isn't enough memory to decode larger ones. Ordinary (baseline) JPEGs of any size are fine.
+- **Updates:** need the network adapter and an internet connection. Releases are found at github.com/Arial-Bold/Flashcube: the newest release's tag (`v1.1`) is compared with this version, and its `.zip` (with `flashcube.dol` and the `flashcube` folder) is installed.
 - **Number of photos:** up to 4,000 photos in up to 64 folders are listed.
 - **Large photos:** the viewer shows photos at up to 2048 pixels on the longer side (more than the TV can show, even at 4x zoom). Slideshows use 1024.
 - **Network speed:** transfers run at the GameCube network adapter's pace, roughly 100 to 300 KB/s.
@@ -129,5 +136,6 @@ docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
 - **TJpgDec** R0.03, (C) ChaN, 2021 (`source/tjpgd.*`). Free to use and redistribute with its copyright notice.
 - **QR Code generator library**, (C) Project Nayuki, MIT licence (`source/qrcodegen.*`).
 - **stb_image and stb_image_write**, Sean Barrett, public domain (downloaded at build time).
+- **mbedTLS** 3.6, Apache 2.0 licence (downloaded at build time), for the secure connection to GitHub. `cacert.pem` is Mozilla's certificate list (MPL 2.0), as used by CubeBrowser.
 - **M PLUS fonts**, (C) The M+ FONTS Project Authors, SIL Open Font License 1.1 (`tools/FONTS-OFL.txt`).
-- **Music player, DOL loader, video and SD code** from CubeBrowser.
+- **Music player, DOL loader, updater, secure connection, video and SD code** from CubeBrowser.

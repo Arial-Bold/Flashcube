@@ -1,7 +1,8 @@
 #---------------------------------------------------------------------------------
 # Flashcube - photo album for the Nintendo GameCube. Builds flashcube.dol
-# Requires devkitPPC + libogc2 + libfat (devkitPro), and stb_image /
-# stb_image_write in third_party/stb (run ./get-deps.sh once).
+# Requires devkitPPC + libogc2 + libfat (devkitPro), stb_image /
+# stb_image_write in third_party/stb and mbedTLS 3.6 in third_party/mbedtls
+# (for checking GitHub for updates). Run ./get-deps.sh once.
 #---------------------------------------------------------------------------------
 .SUFFIXES:
 
@@ -13,21 +14,27 @@ endif
 # WIZnet-based adapters (ETH2GC and similar), SD2SP2 and SD Gecko.
 include $(DEVKITPRO)/libogc2/gamecube_rules
 
+MBEDTLS		:=	third_party/mbedtls
+
 ifneq (build,$(notdir $(CURDIR)))
 ifneq ($(MAKECMDGOALS),clean)
 ifeq ($(wildcard third_party/stb/stb_image_write.h),)
 $(error "stb headers not found in third_party/stb. Run ./get-deps.sh first (see README.md)")
+endif
+ifeq ($(wildcard $(MBEDTLS)/library/ssl_tls.c),)
+$(error "mbedTLS not found in $(MBEDTLS). Run ./get-deps.sh first (see README.md)")
 endif
 endif
 endif
 
 TARGET		:=	flashcube
 BUILD		:=	build
-SOURCES		:=	source
+SOURCES		:=	source $(MBEDTLS)/library
 DATA		:=
 INCLUDES	:=	source
 
-CFLAGS	=	-g -O2 -Wall -std=gnu11 -ffunction-sections -fdata-sections $(MACHDEP) $(INCLUDE)
+CFLAGS	=	-g -O2 -Wall -std=gnu11 -ffunction-sections -fdata-sections $(MACHDEP) $(INCLUDE) \
+		-DMBEDTLS_USER_CONFIG_FILE='"gc_mbedtls_config.h"'
 CXXFLAGS	=	$(CFLAGS)
 LDFLAGS	=	-g $(MACHDEP) -Wl,--gc-sections -Wl,-Map,$(notdir $@).map
 
@@ -53,6 +60,8 @@ export HFILES	:=	$(addsuffix .h,$(subst .,_,$(BINFILES)))
 
 export INCLUDE	:=	$(foreach dir,$(INCLUDES), -iquote $(CURDIR)/$(dir)) \
 			-I$(CURDIR)/source \
+			-I$(CURDIR)/$(MBEDTLS)/include \
+			-I$(CURDIR)/$(MBEDTLS)/library \
 			-I$(CURDIR)/third_party/stb \
 			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
 			-I$(CURDIR)/$(BUILD) \
