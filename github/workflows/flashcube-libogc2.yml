@@ -1,0 +1,30 @@
+name: Build Flashcube (libogc2)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the source code
+        uses: actions/checkout@v5
+
+      - name: Download stb_image
+        run: sh get-deps.sh
+
+      - name: Build the .dol
+        run: docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
+
+      - name: Gather files for the SD card
+        run: |
+          mkdir -p package/flashcube
+          cp flashcube.dol package/
+          cp sd/flashcube/README.txt package/flashcube/
+
+      - name: Upload result
+        uses: actions/upload-artifact@v6
+        with:
+          name: flashcube
+          path: package/

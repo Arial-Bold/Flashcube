@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flashcube</title>
+<style>
+:root{--ink:#14163a;--soft:#5b6090;--line:#e3e5f3;--navy:#1b1e5c;--gold:#f5a524;--green:#2fb36a}
+*{box-sizing:border-box}
+body{margin:0;background:#f3f4fb;color:var(--ink);font:15px/1.4 ui-rounded,"SF Pro Rounded","Nunito","Segoe UI",system-ui,sans-serif}
+header{background:var(--navy);color:#fff;padding:22px 20px 24px;border-radius:0 0 26px 26px}
+.logo{display:flex;gap:3px}
+.logo span{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;border-radius:3px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
+.logo span:nth-child(odd){background:#3a2f8f}.logo span:nth-child(even){background:#5b4fc4}
+.status{margin-top:10px;display:flex;align-items:center;gap:6px;font-size:13px;color:#b9f0c9}
+.status i{width:8px;height:8px;border-radius:4px;background:var(--green)}
+main{max-width:560px;margin:0 auto;padding:18px 16px 28px;display:flex;flex-direction:column;gap:16px}
+.send{font:800 17px/1 inherit;font-family:inherit;color:#1a1530;background:var(--gold);border:none;border-radius:18px;padding:18px;display:flex;align-items:center;justify-content:center;gap:10px;width:100%}
+.note{margin-top:-8px;text-align:center;font-size:12px;color:var(--soft)}
+.card{background:#fff;border-radius:18px;padding:16px;box-shadow:0 2px 10px rgba(20,22,58,.08);border:1px solid var(--line);display:flex;flex-direction:column;gap:12px}
+.h{font-weight:700;font-size:13px;letter-spacing:2px;color:#4a4f9e;text-transform:uppercase}
+.row{display:flex;justify-content:space-between;font-size:13px;gap:8px}
+.row span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:5px}
+.bar div{height:6px;background:#5960d0;width:0}
+.bar.ok div{background:var(--green)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs button{font:700 12px/1 inherit;font-family:inherit;padding:7px 12px;border-radius:12px;border:1px solid #d5d8ee;background:#fff;color:var(--ink)}
+.tabs button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pic{position:relative;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:var(--line)}
+.pic img{display:block;width:100%;height:100%;object-fit:cover}
+.check{position:absolute;right:6px;top:6px;width:24px;height:24px;border-radius:12px;border:2px solid #fff;background:rgba(20,22,58,.35)}
+.check.on{background:var(--gold)}
+.save{font:800 15px/1 inherit;font-family:inherit;color:#fff;background:var(--navy);border:none;border-radius:16px;padding:14px}
+.save:disabled{opacity:.4}
+.more{font:700 13px/1 inherit;font-family:inherit;background:none;border:1px solid #d5d8ee;border-radius:12px;padding:10px;color:var(--ink)}
+.foot{text-align:center;font-size:12px;color:var(--soft)}
+#view{position:fixed;inset:0;background:rgba(10,12,30,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px}
+#view img{max-width:100%;max-height:75vh;border-radius:6px}
+#view a,#view button{font:800 15px/1 inherit;font-family:inherit;border:none;border-radius:14px;padding:12px 20px;text-decoration:none}
+#view a{background:var(--gold);color:#1a1530}#view button{background:#fff;color:var(--ink)}
+#view p{color:#c9cbe8;font-size:12px;margin:0;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo" role="img" aria-label="Flashcube"><span>F</span><span>L</span><span>A</span><span>S</span><span>H</span><span>C</span><span>U</span><span>B</span><span>E</span></div>
+  <div class="status"><i></i><span id="st">Connected to your GameCube</span></div>
+</header>
+<main>
+  <button class="send" id="sendbtn"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M11 16V4m0 0-5 5m5-5 5 5M4 18h14" fill="none" stroke="#1a1530" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Send photos to GameCube</button>
+  <input type="file" id="files" accept="image/jpeg,image/png,image/gif,image/bmp,image/*" multiple hidden>
+  <div class="note">Pick from your photo library. iPhone photos are turned into JPEGs for you.</div>
+  <div class="card" id="sending" hidden><div class="h">Sending</div><div id="queue"></div></div>
+  <div class="card">
+    <div class="row" style="align-items:baseline"><div class="h">On your GameCube</div><span id="count" style="font-size:12px;color:var(--soft)"></span></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="grid" id="grid"></div>
+    <button class="more" id="more" hidden>Show more</button>
+    <button class="save" id="save" disabled>Save photos to this phone</button>
+  </div>
+  <div class="foot">This page comes from your GameCube and only works on your home network.</div>
+</main>
+<div id="view"><img id="vimg" alt=""><p>Press and hold the photo to save it to your Photos.</p><a id="vdl" href="#">Download</a><button id="vclose">Close</button></div>
+<script>
+var all=[],shown=[],tab="All",limit=60,picked={};
+function $(i){return document.getElementById(i)}
+function load(){fetch("/api/photos").then(function(r){return r.json()}).then(function(j){all=j.photos;$("count").textContent=j.count+" photo"+(j.count==1?"":"s");tabs();show()}).catch(function(){$("st").textContent="Can't reach the GameCube"})}
+function tabs(){var t=["All"],ys={};all.forEach(function(p){if(!ys[p.y]){ys[p.y]=1;t.push(String(p.y))}});if(all.some(function(p){return p.v}))t.push("Favorites");
+ $("tabs").innerHTML="";t.forEach(function(n){var b=document.createElement("button");b.textContent=n;if(n==tab)b.className="on";b.onclick=function(){tab=n;limit=60;tabs();show()};$("tabs").appendChild(b)})}
+function show(){shown=all.filter(function(p){return tab=="All"||(tab=="Favorites"?p.v:String(p.y)==tab)});var g=$("grid");g.innerHTML="";
+ shown.slice(0,limit).forEach(function(p){var d=document.createElement("div");d.className="pic";var im=document.createElement("img");im.loading="lazy";im.alt=p.n;im.src="/thumb/"+p.k;d.appendChild(im);
+  var c=document.createElement("div");c.className="check"+(picked[p.k]?" on":"");c.onclick=function(e){e.stopPropagation();if(picked[p.k])delete picked[p.k];else picked[p.k]=p;c.className="check"+(picked[p.k]?" on":"");upd()};d.appendChild(c);
+  d.onclick=function(){$("vimg").src="/photo/"+p.k+"/"+encodeURIComponent(p.n);$("vdl").href="/photo/"+p.k+"/"+encodeURIComponent(p.n)+"?dl=1";$("vdl").setAttribute("download",p.n);$("view").style.display="flex"};g.appendChild(d)});
+ $("more").hidden=shown.length<=limit;upd()}
+function upd(){var n=Object.keys(picked).length;$("save").disabled=!n;$("save").textContent=n?"Save "+n+" photo"+(n==1?"":"s")+" to this phone":"Save photos to this phone"}
+$("more").onclick=function(){limit+=60;show()};
+$("vclose").onclick=function(){$("view").style.display="none";$("vimg").src=""};
+$("save").onclick=function(){var list=Object.keys(picked).map(function(k){return picked[k]}),i=0;
+ (function next(){if(i>=list.length){picked={};show();return}var p=list[i++],a=document.createElement("a");a.href="/photo/"+p.k+"/"+encodeURIComponent(p.n)+"?dl=1";a.download=p.n;document.body.appendChild(a);a.click();a.remove();setTimeout(next,1200)})()};
+$("sendbtn").onclick=function(){$("files").click()};
+$("files").onchange=function(){var fs=Array.prototype.slice.call(this.files);this.value="";if(!fs.length)return;$("sending").hidden=false;
+ var rows=fs.map(function(f){var r=document.createElement("div");r.innerHTML='<div class="row"><span></span><span>Waiting</span></div><div class="bar"><div></div></div>';r.querySelector("span").textContent=f.name;$("queue").insertBefore(r,$("queue").firstChild);return r});
+ var i=0;(function next(){if(i>=fs.length){load();return}var f=fs[i],r=rows[i];i++;var x=new XMLHttpRequest();x.open("POST","/upload?name="+encodeURIComponent(f.name));
+  x.upload.onprogress=function(e){if(e.lengthComputable){var pc=Math.round(e.loaded*100/e.total);r.querySelector(".bar div").style.width=pc+"%";r.querySelectorAll("span")[1].textContent=pc+"%"}};
+  x.onload=function(){var ok=false,err="Failed";try{var j=JSON.parse(x.responseText);ok=j.ok;err=j.error||err}catch(e){}r.querySelectorAll("span")[1].textContent=ok?"Sent":err;if(ok){r.querySelector(".bar").className="bar ok";r.querySelector(".bar div").style.width="100%"}next()};
+  x.onerror=function(){r.querySelectorAll("span")[1].textContent="Failed";next()};x.send(f)})()};
+load();
+</script>
+</body>
+</html>
