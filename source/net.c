@@ -64,6 +64,7 @@ static int narrived;
 
 NetState net_state(void) { return state; }
 const char *net_ip(void) { return ip; }
+const char *net_gateway(void) { return gw; }
 const char *net_message(void) { return msg; }
 const char *net_url(void) { return url; }
 int net_received(void) { return received; }

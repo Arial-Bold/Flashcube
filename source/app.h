@@ -57,6 +57,12 @@ void settings_panel_open(void);
 void settings_panel_update(void);
 void settings_panel_draw(void);
 
+/* The Software Update window (Settings, or Z on the cube). */
+bool update_panel_active(void);
+void update_panel_open(bool check_now);
+void update_panel_update(void);
+void update_panel_draw(void);
+
 /* A message shown for a few seconds at the bottom of the screen. */
 void app_toast(const char *msg);
 void app_draw_toast(void);

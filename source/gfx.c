@@ -561,6 +561,40 @@ void gfx_rrect_vgrad(float x, float y, float w, float h, float r, Color top, Col
 
 void gfx_rrect(float x, float y, float w, float h, float r, Color c) { gfx_rrect_vgrad(x, y, w, h, r, c, c); }
 
+/* A rounded rectangle shaded top -> middle -> bottom, drawn in one piece
+ * (two separate see-through halves would double up where they meet). */
+void gfx_rrect_vgrad3(float x, float y, float w, float h, float r, Color top, Color mid, Color bottom) {
+    if (!(w > 0) || !(h > 0) || !isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h) || !isfinite(r)) return;
+    if (r > w * 0.5f) r = w * 0.5f;
+    if (r > h * 0.5f) r = h * 0.5f;
+    if (r < 0) r = 0;
+    enum { CS = 4 };
+    float ys[2 * CS + 4], in[2 * CS + 4];
+    int n = 0;
+    for (int i = 0; i <= CS; i++) {          /* down the top corners */
+        float a = (float)M_PI * 0.5f * (1 - (float)i / CS);
+        ys[n] = y + r - r * sinf(a);
+        in[n++] = r - r * cosf(a);
+    }
+    ys[n] = y + h * 0.5f; in[n++] = 0;       /* the middle colour stop */
+    for (int i = 0; i <= CS; i++) {          /* down the bottom corners */
+        float a = (float)M_PI * 0.5f * (float)i / CS;
+        ys[n] = y + h - r + r * sinf(a);
+        in[n++] = r - r * cosf(a);
+    }
+    /* keep the middle stop in order if the corners pass it */
+    for (int i = 1; i < n; i++) if (ys[i] < ys[i - 1]) ys[i] = ys[i - 1];
+    mode_color();
+    BEGIN(GX_TRIANGLESTRIP, n * 2);
+    for (int i = 0; i < n; i++) {
+        float t = (ys[i] - y) / h;
+        Color c = t < 0.5f ? color_lerp(top, mid, t * 2) : color_lerp(mid, bottom, t * 2 - 1);
+        vtx(x + in[i], ys[i], c);
+        vtx(x + w - in[i], ys[i], c);
+    }
+    GX_End();
+}
+
 void gfx_rrect_outline(float x, float y, float w, float h, float r, float t, Color c) {
     if (!(w > 0) || !(h > 0) || !isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h) || !isfinite(t)) return;
     if (!guard_rrect(&x, &y, &w, &h, r + t, NULL, NULL)) return;

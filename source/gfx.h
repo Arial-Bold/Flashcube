@@ -34,6 +34,7 @@ void  gfx_set_margin(float m);
  * when there is a margin): for backgrounds and full-screen pictures. */
 void  gfx_full_area(float *x, float *y, float *w, float *h);
 /* One screen pixel in drawing units, and coordinates moved onto pixel edges. */
+void  gfx_rrect_vgrad3(float x, float y, float w, float h, float r, Color top, Color mid, Color bottom);
 void  gfx_fill_screen(Color c);   /* the whole TV picture, margins included */
 float gfx_pixel_w(void);
 float gfx_pixel_h(void);

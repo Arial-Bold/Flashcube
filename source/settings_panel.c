@@ -10,6 +10,7 @@
 #include "sound.h"
 #include "storage.h"
 #include "dolload.h"
+#include "update.h"
 #include "version.h"
 #include "m3d.h"
 #include <stdio.h>
@@ -20,10 +21,11 @@
 #endif
 
 enum { S_SCREEN, S_WIDTH, S_MARGIN, S_VIDEO, S_INTRO, S_SOUNDS, S_VOLUME, S_MENU_MUSIC, S_MUSIC, S_ORDER, S_CACHE,
-       S_EXIT_ACTION, S_EXIT_DOL, S_EXIT, SN };
+       S_UPDATE, S_UPDATE_AUTO, S_EXIT_ACTION, S_EXIT_DOL, S_EXIT, SN };
 static const char *const labels[SN] = { "Screen", "Picture width", "Screen margin", "Video", "Opening animation",
                                         "Menu sounds", "Sound volume", "Menu music", "Music volume", "Album order",
-                                        "Thumbnails", "Exit button", "Program to start", "Exit now" };
+                                        "Thumbnails", "Software update", "Check for updates at start", "Exit button",
+                                        "Program to start", "Exit now" };
 static const char *const help[SN] = {
     "4:3 for most TVs, 16:9 for widescreen TVs set to stretch the picture.",
     "Full uses the whole width of the TV picture (704 pixels). Standard is 640.",
@@ -36,6 +38,8 @@ static const char *const help[SN] = {
     "How loud the menu music and the music folder's songs are.",
     "Show the newest or the oldest photos first.",
     "Thumbnails are saved on the SD card so the album opens quickly. Clear them if they look wrong.",
+    "Press A to see if there's a new version of Flashcube on GitHub, and what's new in it.",
+    "A quick check for a new version when Flashcube starts (it uses the network adapter, if there is one).",
     "What B on the cube (and Exit now) does: start another program, or restart the console.",
     "The program Exit starts. boot.dol is usually Swiss. Left and right choose from the .dol files on the card.",
     "Press A twice to leave Flashcube now.",
@@ -96,6 +100,7 @@ static void change(int d) {
     case S_MENU_MUSIC: g_set.menu_music = !g_set.menu_music; break;
     case S_MUSIC: g_set.music_volume += d; clampi(&g_set.music_volume, 0, 10); break;
     case S_ORDER: g_set.sort_newest = !g_set.sort_newest; break;
+    case S_UPDATE_AUTO: g_set.update_auto = !g_set.update_auto; break;
     case S_EXIT_ACTION: g_set.exit_action = !g_set.exit_action; break;
     case S_EXIT_DOL: {
         if (!dols_scanned) scan_dols();
@@ -129,6 +134,9 @@ void settings_panel_update(void) {
             photos_clear_cache();
             sound_play(SFX_CONFIRM);
             app_toast("Thumbnails will be made again as they're needed.");
+        } else if (srow == S_UPDATE) {
+            sound_play(SFX_SELECT);
+            update_panel_open(true);
         } else if (srow == S_EXIT) {
             if (++exit_confirm >= 2) { exit_confirm = 0; app_exit(); }
             else sound_play(SFX_SELECT);
@@ -161,6 +169,17 @@ static void value_text(int i, char *out, size_t cap) {
     case S_MUSIC: snprintf(out, cap, "%d", g_set.music_volume); break;
     case S_ORDER: snprintf(out, cap, "%s", g_set.sort_newest ? "Newest first" : "Oldest first"); break;
     case S_CACHE: snprintf(out, cap, "Clear"); break;
+    case S_UPDATE: {
+        UpdateState us = update_state();
+        if (us == UPD_AVAILABLE) snprintf(out, cap, "\x84 %s available", update_latest_version());
+        else if (us == UPD_INSTALLED) snprintf(out, cap, "Restart to finish");
+        else if (us == UPD_INSTALLING) snprintf(out, cap, "Installing...");
+        else if (us == UPD_CHECKING) snprintf(out, cap, "Checking...");
+        else if (us == UPD_LATEST) snprintf(out, cap, "Up to date");
+        else snprintf(out, cap, "Check now");
+        break;
+    }
+    case S_UPDATE_AUTO: snprintf(out, cap, "%s", g_set.update_auto ? "On" : "Off"); break;
     case S_EXIT_ACTION: snprintf(out, cap, "%s", g_set.exit_action == EXIT_RESTART ? "Restart console" : "Start a program"); break;
     case S_EXIT_DOL: snprintf(out, cap, "%s", dol ? dol + 1 : g_set.swiss_dol); break;
     case S_EXIT: snprintf(out, cap, "%s", exit_confirm ? "Press A again" : app_exit_label()); break;
@@ -192,7 +211,7 @@ void settings_panel_draw(void) {
         ui_text(FONT_MENU, 14, 1.4f, px + 20, y, 27, c, labels[i]);
         char v[260];
         value_text(i, v, sizeof(v));
-        bool arrows = i != S_CACHE && i != S_EXIT;
+        bool arrows = i != S_CACHE && i != S_EXIT && i != S_UPDATE;
         float right = px + pw - 20;
         Color vc = i == S_EXIT && exit_confirm ? gold : c;
         if (!arrows) {

@@ -11,6 +11,7 @@
 #include "sound.h"
 #include "midi.h"
 #include "menumusic.h"
+#include "update.h"
 #include "applog.h"
 #include "net.h"
 #include "dolload.h"
@@ -231,6 +232,7 @@ void app_frame(void) {
     photos_tick();
     net_tick();
     menumusic_update();
+    update_poll();
 
     if (fading == 1) {
         fade += g_dt / 0.14f;
@@ -257,8 +259,8 @@ void app_frame(void) {
 
 #ifndef PC_TEST
 int main(int argc, char **argv) {
-    (void)argc; (void)argv;
     app_init();
+    update_set_program(argc > 0 ? argv[0] : NULL);   /* the .dol an update replaces */
     for (;;) app_frame();
     return 0;
 }

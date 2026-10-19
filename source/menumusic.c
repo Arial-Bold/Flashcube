@@ -42,7 +42,7 @@ void menumusic_update(void) {
 
 #define CHUNK_FRAMES 288                   /* 1152 bytes of 16-bit stereo */
 #define RING_FRAMES (CHUNK_FRAMES * 64)    /* about one second */
-#define LEAD 4500                          /* frames written ahead of the voice */
+#define LEAD 6000                          /* frames written ahead of the voice */
 #define FRAMES_PER_BLOCK 36
 
 static int16_t ring[RING_FRAMES * 2] __attribute__((aligned(32)));
@@ -51,14 +51,42 @@ static thr_t th;
 static bool th_ok;
 static volatile bool quit;
 
-/* where the voice is (frames since it started) */
+/* Where the voice is, in frames since it started. The sound library copies
+ * the voice's data to audio memory a chunk at a time and keeps its read
+ * pointer (mram_curr) in the voice's block; that pointer is exactly how far
+ * the voice has got (a chunk or two ahead of what is heard), so writing
+ * past it is always safe. Counting 2 ms blocks instead drifts: when the DSP
+ * is busy, the library skips a block without moving the voices on.
+ * The block's layout is fixed by the DSP's mixer program; it's checked
+ * against the ring's address before being trusted. */
+#define PB_MRAM_START 64
+#define PB_MRAM_CURR 68
+static uint32_t ring_addr;
+static bool pb_ok;
+static uint32_t last_off;
+static uint64_t pos_frames;
 static uint32_t blk0;
-static u64 tick0;
+
+static void pos_reset(void) {
+    ring_addr = (uint32_t)(uintptr_t)ring;
+    pb_ok = *(volatile uint32_t *)((uint8_t *)voice + PB_MRAM_START) == ring_addr;
+    last_off = 0;
+    pos_frames = 0;
+    blk0 = midi_audio_blocks();
+}
+
 static uint64_t voice_pos(void) {
-    uint32_t b = midi_audio_blocks();
-    if (b) return (uint64_t)(b - blk0) * FRAMES_PER_BLOCK;
-    /* no block counter (the music player didn't start): go by the clock */
-    return (uint64_t)ticks_to_microsecs(gettime() - tick0) * MS_RATE / 1000000u;
+    if (pb_ok) {
+        uint32_t cur = *(volatile uint32_t *)((uint8_t *)voice + PB_MRAM_CURR);
+        if (cur >= ring_addr && cur <= ring_addr + sizeof(ring)) {
+            uint32_t off = (cur - ring_addr) / 4 % RING_FRAMES;
+            pos_frames += (off + RING_FRAMES - last_off) % RING_FRAMES;
+            last_off = off;
+        }
+        return pos_frames;
+    }
+    /* fallback: count the 2 ms blocks */
+    return (uint64_t)(midi_audio_blocks() - blk0) * FRAMES_PER_BLOCK;
 }
 
 static void *mm_thread(void *arg) {
@@ -74,16 +102,15 @@ static void *mm_thread(void *arg) {
             if (!reset_done) { ms_reset(); reset_done = true; }
             memset(ring, 0, sizeof(ring));
             DCFlushRange(ring, sizeof(ring));
-            blk0 = midi_audio_blocks();
-            tick0 = gettime();
             written = 600;
             AESND_SetVoiceVolume(voice, 255, 255);
             AESND_PlayVoice(voice, VOICE_STEREO16, ring, sizeof(ring), MS_RATE, 0, true);
+            pos_reset();
             playing = true;
             quiet_until = 0;
         }
         uint64_t pos = voice_pos();
-        if (written < pos + 600) written = pos + 600;   /* fell behind: skip ahead */
+        if (written < pos + 300) written = pos + 300;   /* fell behind: skip ahead */
         uint64_t goal = pos + LEAD;
         while (written < goal) {
             int at = (int)(written % RING_FRAMES);

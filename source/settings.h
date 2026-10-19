@@ -25,6 +25,8 @@ typedef struct {
     int  ss_music;         /* play the music folder during slideshows */
     /* Album */
     int  sort_newest;      /* newest photos first */
+    /* Updates */
+    int  update_auto;      /* check GitHub for a new version at start-up */
     /* Leaving */
     int  exit_action;      /* EXIT_LOAD_DOL or EXIT_RESTART */
     char swiss_dol[256];   /* the program Exit starts (sd:/boot.dol unless chosen) */

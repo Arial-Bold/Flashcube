@@ -21,7 +21,7 @@ static const Key keys[] = {
     I("music.shuffle", music_shuffle, 0, 1), I("music.repeat", music_repeat, 0, 1),
     I("slideshow.transition", ss_transition, 0, 2), I("slideshow.seconds", ss_seconds, 3, 20),
     I("slideshow.shuffle", ss_shuffle, 0, 1), I("slideshow.music", ss_music, 0, 1),
-    I("album.newest_first", sort_newest, 0, 1), I("exit.action", exit_action, 0, 1), S("exit.dol", swiss_dol),
+    I("album.newest_first", sort_newest, 0, 1), I("update.auto", update_auto, 0, 1), I("exit.action", exit_action, 0, 1), S("exit.dol", swiss_dol),
 };
 #define NKEYS (int)(sizeof(keys) / sizeof(keys[0]))
 
@@ -38,6 +38,7 @@ void settings_defaults(Settings *s) {
     s->sounds = 1;
     s->volume = 7;
     s->menu_music = 1;
+    s->update_auto = 1;
     s->music_volume = 7;
     s->music_repeat = 1;
     s->ss_transition = SS_PANZOOM;

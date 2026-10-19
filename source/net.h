@@ -11,6 +11,7 @@ typedef enum { NET_OFF, NET_STARTING, NET_UP, NET_FAILED } NetState;
 void net_start(void);            /* starts the network and the server (once) */
 NetState net_state(void);
 const char *net_ip(void);        /* "192.168.1.50" when up */
+const char *net_gateway(void);   /* the router, when up */
 const char *net_message(void);   /* status or problem, for the screen */
 const char *net_url(void);       /* "http://192.168.1.50/" (port added if not 80) */
 

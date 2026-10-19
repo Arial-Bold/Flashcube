@@ -148,9 +148,10 @@ static void looks_draw(float open) {
     } else {
         ui_spinner(fx + fw / 2, fy + fh / 2, 14, g_time, 1);
     }
-    ui_desc(X + 20, 342, UI_W - 40, 56, 1);
-    ui_text(FONT_MENU_BOLD, 14, 1.3f, X + 32, 346, 22, rgba(0xec, 0xeb, 0xff, 255), look_names[look]);
-    ui_text_fit_scroll(FONT_MENU, 13, 1.2f, X + 32, 368, UI_W - 64, 24, rgba(0xc9, 0xc6, 0xff, 255), look_help[look]);
+    /* the description sits just above the hints, clear of the frame */
+    ui_desc(X + 20, 366, UI_W - 40, 52, 1);
+    ui_text(FONT_MENU_BOLD, 14, 1.3f, X + 32, 369, 22, rgba(0xec, 0xeb, 0xff, 255), look_names[look]);
+    ui_text_fit_scroll(FONT_MENU, 13, 1.2f, X + 32, 390, UI_W - 64, 24, rgba(0xc9, 0xc6, 0xff, 255), look_help[look]);
     const char *h[] = { "S:Select", "B:Back", "A:Save a Copy" };
     ui_hints(h, 3, 1, input_stick_dir());
     if (saving > 0) ui_message("Saving", "Saving a copy with this look...", 1);

@@ -218,13 +218,11 @@ void ui_button(float x, float y, float w, float h, const char *label, bool on, f
     gfx_rrect_outline(x - 1, y - 1, w + 2, h + 2, 4, 1, on ? rgba(40, 32, 4, (u8)(0.9f * A)) : rgba(10, 12, 16, (u8)(0.8f * A)));
     if (on) {
         gfx_shadow(x, y, w, h, 3, 6, rgba(240, 210, 80, (u8)(0.35f * A)));
-        gfx_rrect_vgrad(x, y, w, h * 0.5f + 1, 3, rgba(255, 244, 150, (u8)(0.80f * A)), rgba(225, 195, 60, (u8)(0.55f * A)));
-        gfx_rect_vgrad(x, y + h * 0.5f, w, h * 0.5f - 2, rgba(225, 195, 60, (u8)(0.55f * A)), rgba(170, 140, 30, (u8)(0.62f * A)));
-        gfx_rrect(x, y + h - 3, w, 3, 2, rgba(170, 140, 30, (u8)(0.62f * A)));
+        gfx_rrect_vgrad3(x, y, w, h, 3, rgba(255, 244, 150, (u8)(0.80f * A)), rgba(225, 195, 60, (u8)(0.55f * A)),
+                         rgba(170, 140, 30, (u8)(0.62f * A)));
     } else {
-        gfx_rrect_vgrad(x, y, w, h * 0.5f + 1, 3, rgba(235, 240, 248, (u8)(0.42f * A)), rgba(170, 180, 195, (u8)(0.22f * A)));
-        gfx_rect_vgrad(x, y + h * 0.5f, w, h * 0.5f - 2, rgba(170, 180, 195, (u8)(0.22f * A)), rgba(120, 130, 145, (u8)(0.30f * A)));
-        gfx_rrect(x, y + h - 3, w, 3, 2, rgba(120, 130, 145, (u8)(0.30f * A)));
+        gfx_rrect_vgrad3(x, y, w, h, 3, rgba(235, 240, 248, (u8)(0.42f * A)), rgba(170, 180, 195, (u8)(0.22f * A)),
+                         rgba(120, 130, 145, (u8)(0.30f * A)));
     }
     /* the fine grid at the right end, fading out to the left */
     grid_patch(x + 1, y + 1, w - 2, h - 2, 6, 0.42f, 1,

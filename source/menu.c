@@ -10,6 +10,7 @@
 #include "settings.h"
 #include "sound.h"
 #include "menumusic.h"
+#include "update.h"
 #include "net.h"
 #include "m3d.h"
 #include <stdio.h>
@@ -123,7 +124,16 @@ static void menu_update(void) {
     cv.time += g_dt;
     icon_clock += g_dt;
     fill_pages();
+    if (update_panel_active()) { update_panel_update(); return; }
     if (settings_panel_active()) { settings_panel_update(); return; }
+    /* a new version found by the check at start-up: say so once */
+    static bool told;
+    if (!told && update_state() == UPD_AVAILABLE && update_was_quiet()) {
+        told = true;
+        char m[96];
+        snprintf(m, sizeof(m), "Flashcube %s is available. Press Z to see what's new.", update_latest_version());
+        app_toast(m);
+    }
 
     switch (state) {
     case M_INTRO:
@@ -133,6 +143,7 @@ static void menu_update(void) {
         if (intro_t >= (intro_skip ? 1.0f : logo_duration())) {
             set_state(M_NAV);
             menumusic_start(intro_skip ? 1.0f : 2.0f);   /* after the opening sound */
+            if (g_set.update_auto && update_state() == UPD_NONE) update_request_check(true);
         }
         break;
     case M_NAV: {
@@ -140,6 +151,11 @@ static void menu_update(void) {
         if (s < 0) s = dir_to_side(input_dir());
         if (s >= 0) start_turn(s);
         else if (input_pressed(BTN_START)) { sound_play(SFX_SELECT); settings_panel_open(); }
+        else if (input_pressed(BTN_Z) && (update_state() == UPD_AVAILABLE || update_state() == UPD_INSTALLED ||
+                                          update_state() == UPD_INSTALLING)) {
+            sound_play(SFX_SELECT);
+            update_panel_open(false);
+        }
         else if (input_pressed(BTN_B)) {
             /* B twice: back to Swiss (or whatever Exit is set to do) */
             if (g_time < exit_armed_until) { exit_armed_until = 0; app_exit(); }
@@ -281,7 +297,7 @@ static void menu_draw(float open) {
     cube_draw(&cv);
 
     /* hints along the bottom */
-    if (settings_panel_active()) hints = 0;
+    if (settings_panel_active() || update_panel_active()) hints = 0;
     if (state == M_INTRO || state == M_NAV || (state == M_TURN_OUT && queued_side < 0 && st > TURN_OUT_S * 0.5f)) {
         int d = input_stick_dir();
         if (d < 0) {   /* demonstrate: the knob nods up, right, down, left */
@@ -291,8 +307,22 @@ static void menu_draw(float open) {
         }
         char exit_hint[72];
         snprintf(exit_hint, sizeof(exit_hint), "B:%s", app_exit_label());
-        const char *h[] = { "S:Menu Selection", "ST:Settings", exit_hint };
-        ui_hints_center(h, state == M_NAV ? 3 : 1, UI_HINT_Y, 36, hints, d, true);
+        UpdateState us = update_state();
+        bool upd = us == UPD_AVAILABLE || us == UPD_INSTALLING || us == UPD_INSTALLED;
+        const char *h[] = { "S:Menu Selection", "ST:Settings", exit_hint, us == UPD_INSTALLED ? "Z:Restart" : "Z:Update" };
+        if (state == M_NAV) ui_hints(h, upd ? 4 : 3, hints, d);
+        else ui_hints_center(h, 1, UI_HINT_Y, 36, hints, d, true);
+        /* a new version: a little gold tag at the top */
+        if (upd && state == M_NAV && !settings_panel_active() && !update_panel_active()) {
+            char tag[64];
+            snprintf(tag, sizeof(tag), us == UPD_INSTALLED ? "\x84 Flashcube %s is installed" : us == UPD_INSTALLING ? "\x84 Installing Flashcube %s" : "\x84 Flashcube %s is available",
+                     update_latest_version());
+            float tw = gfx_text_width_sp(FONT_MENU_BOLD, 13, 1.2f, tag, -1) + 28;
+            float tx = UI_X + UI_W / 2 - tw / 2, ty = 382;   /* under the cube, above the hints */
+            gfx_rrect(tx, ty, tw, 26, 13, rgba(40, 32, 6, (u8)(200 * hints)));
+            gfx_rrect_outline(tx, ty, tw, 26, 13, 1.5f, rgba(0xe8, 0xcf, 0x4a, (u8)(220 * hints)));
+            ui_text_center(FONT_MENU_BOLD, 13, 1.2f, tx + tw / 2, ty, 26, rgba(0xf6, 0xe0, 0x7a, (u8)(255 * hints)), tag);
+        }
     } else {
         const char *h[] = { "B:Cancel", "A:Confirm" };
         ui_hints_center(h, 2, UI_HINT_Y, 34, hints, -1, true);
@@ -304,6 +334,7 @@ static void menu_draw(float open) {
         scr->draw(st - OPEN_SWIRL_AT);
     }
     if (settings_panel_active()) settings_panel_draw();
+    if (update_panel_active()) update_panel_draw();
 }
 
 const Screen screen_menu = { menu_enter, menu_update, menu_draw, NULL };

@@ -170,7 +170,6 @@ void music_panel_draw(void) {
 
     /* buttons */
     float by = py + 124, cxm = px + pw / 2;
-    ui_row(px + 8, by - 26, pw - 16, 52, row == R_BUTTONS, a * 0.6f);
     round_button(cxm - 70, by, 18, 0, row == R_BUTTONS && button == 0, a);
     float big = 22 + (flash > 0 && button == 1 ? 2 : 0);
     round_button(cxm, by, big, st == MIDI_PLAYING ? 3 : 1, row == R_BUTTONS && button == 1, a);

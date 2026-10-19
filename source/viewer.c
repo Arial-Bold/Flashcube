@@ -13,8 +13,13 @@
 #include <stdio.h>
 #include <string.h>
 
-enum { ROW_ZOOM, ROW_ROTATE, ROW_INFO, ROW_FAV, ROW_SLIDESHOW, ROW_FUN, NROWS };
-static const char *row_names[NROWS] = { "Zoom", "Rotate", "Information", "Favorite", "Slideshow", "Fun" };
+enum { ROW_ZOOM, ROW_ROTATE, ROW_INFO, ROW_FAV, ROW_SLIDESHOW, ROW_FUN, ROW_DELETE, NROWS };
+static const char *row_names[NROWS] = { "Zoom", "Rotate", "Information", "Favorite", "Slideshow", "Playtime", "Delete" };
+
+/* "Delete this photo?" */
+static bool confirm;
+static int confirm_btn;        /* 0 Delete, 1 Cancel */
+static float confirm_t;
 
 static PicRequest req;
 static int row;
@@ -107,9 +112,47 @@ static void step(int d) {
     load_current();
 }
 
+/* Deletes the photo on screen from the SD card and the album. */
+static void delete_current(void) {
+    int idx = g_view[g_view_pos];
+    Photo *p = photos_get(idx);
+    if (!p) return;
+    char path[300];
+    snprintf(path, sizeof(path), "%s", p->path);
+    if (remove(path) != 0) {
+        sound_play(SFX_ERROR);
+        app_toast("The photo couldn't be deleted. Is the SD card locked?");
+        return;
+    }
+    if (p->fav) photos_set_fav(idx, false);
+    photos_release_picture(&req);
+    photos_forget(idx);
+    /* the album's list: drop it, and close up the indexes after it */
+    int n = 0;
+    for (int k = 0; k < g_view_count; k++) {
+        if (g_view[k] == idx) continue;
+        g_view[n++] = g_view[k] > idx ? g_view[k] - 1 : g_view[k];
+    }
+    g_view_count = n;
+    sound_play(SFX_CONFIRM);
+    app_toast("Deleted.");
+    if (g_view_count == 0) { app_go(SCR_ALBUM, 0); return; }
+    if (g_view_pos >= g_view_count) g_view_pos = g_view_count - 1;
+    shown_photo = -1;
+    load_current();
+}
+
 static void viewer_update(void) {
     change_t += g_dt;
     Photo *p = current();
+    if (confirm) {
+        confirm_t += g_dt;
+        int d = input_dir();
+        if ((d == DIR_LEFT && confirm_btn == 1) || (d == DIR_RIGHT && confirm_btn == 0)) { confirm_btn ^= 1; sound_play(SFX_HOVER); }
+        if (input_pressed(BTN_B) || (input_pressed(BTN_A) && confirm_btn == 1)) { confirm = false; sound_play(SFX_CANCEL); }
+        else if (input_pressed(BTN_A)) { confirm = false; delete_current(); }
+        return;
+    }
     if (input_pressed(BTN_B)) {
         if (full) { full = false; sound_play(SFX_BACK); return; }
         if (info_on) { info_on = false; sound_play(SFX_BACK); return; }
@@ -136,6 +179,7 @@ static void viewer_update(void) {
             break;
         case ROW_SLIDESHOW: app_go(SCR_SLIDESHOW, 1000 + g_view_pos); break;
         case ROW_FUN: g_pick_for = PICK_NONE; app_go(SCR_PLAYTIME, 1000 + g_view[g_view_pos]); break;
+        case ROW_DELETE: confirm = true; confirm_btn = 1; confirm_t = 0; break;
         }
     }
     /* zoom: R closer, L further (analogue or click) */
@@ -215,7 +259,7 @@ static void viewer_draw(float open) {
 
     /* the photo menu */
     if (ua > 0) {
-        ui_panel(X + 20, 18, 120, 240, ua);
+        ui_panel(X + 20, 18, 120, 268, ua);
         ui_ptitle(X + 20, 18, 120, "Photo", NULL, ua);
         Photo *p = current();
         for (int i = 0; i < NROWS; i++) {
@@ -292,6 +336,27 @@ static void viewer_draw(float open) {
         }
     }
 
+    if (confirm) {   /* "Delete this photo?" */
+        float a = ease_out(clamp01(confirm_t / 0.18f));
+        gfx_fill_screen(rgba(0, 0, 0, (u8)(140 * a)));
+        float w = 400, h = 172, x = X + UI_W / 2 - w / 2, y = 132;
+        ui_panel(x, y, w, h, a);
+        ui_ptitle(x, y, w, "Delete", NULL, a);
+        ui_text_center(FONT_MENU_BOLD, 15, 1.2f, x + w / 2, y + 44, 24, rgba(0xee, 0xf1, 0xf6, (u8)(255 * a)), "Delete this photo?");
+        Photo *cp = current();
+        ui_text_fit_scroll(FONT_MENU, 13, 1.2f, x + 24, y + 70, w - 48, 20, rgba(0xc9, 0xd2, 0xee, (u8)(255 * a)),
+                           "It's removed from the SD card for good.");
+        if (cp) {
+            float nw = gfx_text_width_sp(FONT_MENU, 13, 1.2f, cp->name, -1);
+            float nx = nw < w - 48 ? x + w / 2 - nw / 2 : x + 24;
+            ui_text_fit_scroll(FONT_MENU, 13, 1.2f, nx, y + 90, w - 48, 20, rgba(0x73, 0x92, 0xff, (u8)(255 * a)), cp->name);
+        }
+        ui_button(x + w / 2 - 150, y + h - 46, 130, 28, "Delete", confirm_btn == 0, a);
+        ui_button(x + w / 2 + 20, y + h - 46, 130, 28, "Cancel", confirm_btn == 1, a);
+        const char *ch[] = { "S:Select", "B:Cancel", "A:Confirm" };
+        ui_hints(ch, 3, a, input_stick_dir());
+        return;
+    }
     const char *h[] = { "S:Move", "LR:Zoom", "DP:Next", "B:Back", "A:Confirm" };
     ui_hints(h, 5, ua, input_stick_dir());
 }
