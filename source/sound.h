@@ -1,7 +1,7 @@
-/* sound.h - small procedurally synthesised UI sounds (no sampled assets). */
+/* sound.h - menu sounds (made at start-up, see sfxsynth.c) played on the
+ * DSP's hardware voices. */
 #pragma once
-
-typedef enum { SFX_HOVER, SFX_SELECT, SFX_BACK, SFX_ERROR, SFX_KEY, SFX_OPEN, SFX_CLOSE, SFX_LOADED, SFX_COUNT } Sfx;
+#include "sfxsynth.h"
 
 void sound_init(void);
 void sound_play(Sfx s);

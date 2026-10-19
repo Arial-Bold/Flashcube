@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define COLS 4
+static int COLS = 4;          /* 5 across in 16:9 */
 #define ROWS 3
 #define CW 129.0f
 #define CH 82.0f
@@ -99,8 +99,11 @@ static void keep_visible(void) {
     if (row > scroll_target + ROWS - 1) scroll_target = (float)(row - ROWS + 1);
 }
 
+static void set_cols(void) { COLS = UI_W > 700 ? 5 : 4; }
+
 static void album_enter(int arg) {
     (void)arg;
+    set_cols();
     build_tabs();
     if (tab >= TAB_YEAR1 && tab <= TAB_YEAR3 && tab_index(tab) == 0) tab = TAB_ALL;
     build_view();
@@ -110,6 +113,7 @@ static void album_enter(int arg) {
 }
 
 static void album_update(void) {
+    set_cols();
     if (photos_scanning()) return;
     if (built_for_count != photos_count()) { build_tabs(); build_view(); }
     sel_flash += g_dt;
@@ -180,10 +184,11 @@ static void draw_tabs(float x, float y, float al) {
 }
 
 static void album_draw(float open) {
+    set_cols();
     float X = UI_X;
     ui_background_grid(ramp(open, 0, 0.35f));
     float pa = ramp(open, 0.45f, 0.85f);
-    ui_panel(X + 22, 18, 596, 400, pa);
+    ui_panel(X + 22, 18, UI_W - 44, 400, pa);
     char right[64] = "";
     const char *title = g_pick_for ? "Pick a photo" : "Album";
     if (g_pick_for) {
@@ -194,24 +199,24 @@ static void album_draw(float open) {
     } else {
         snprintf(right, sizeof(right), "%s \x7f %d photo%s", g_view_name, g_view_count, g_view_count == 1 ? "" : "s");
     }
-    ui_ptitle(X + 22, 18, 596, title, right, pa);
-    if (!photos_scanning()) draw_tabs(X + 36, 58, pa);
-
-    float x0 = X + 40, y0 = 96;
+    ui_ptitle(X + 22, 18, UI_W - 44, title, right, pa);
+    float gridw = COLS * CW + (COLS - 1) * GX;
+    float x0 = X + (UI_W - gridw) / 2, y0 = 96;
+    if (!photos_scanning()) draw_tabs(x0 - 4, 58, pa);
     int n = item_count();
     float swirl_done = ui_swirl_duration(COLS * ROWS);
     if (photos_scanning()) {
-        ui_spinner(X + 320, 220, 16, g_time, pa);
-        ui_text_center(FONT_MENU, 14, 1.2f, X + 320, 250, 24, rgba(0xdf, 0xe4, 0xff, (u8)(255 * pa)), "Reading your photos...");
+        ui_spinner(X + UI_W / 2, 220, 16, g_time, pa);
+        ui_text_center(FONT_MENU, 14, 1.2f, X + UI_W / 2, 250, 24, rgba(0xdf, 0xe4, 0xff, (u8)(255 * pa)), "Reading your photos...");
     } else if (n == 0) {
         const char *msg = tab == TAB_FAVS ? "No favorites yet. Mark a photo with Favorite in the photo menu."
                           : photos_status()[0] ? photos_status() : "No photos here yet.";
-        ui_text_center(FONT_MENU, 14, 1.2f, X + 320, 200, 24, rgba(0xdf, 0xe4, 0xff, (u8)(255 * pa)), msg);
+        ui_text_center(FONT_MENU, 14, 1.2f, X + UI_W / 2, 200, 24, rgba(0xdf, 0xe4, 0xff, (u8)(255 * pa)), msg);
         if (photos_count() == 0)
-            ui_text_center(FONT_MENU, 13, 1.2f, X + 320, 230, 24, rgba(0xc9, 0xd2, 0xee, (u8)(255 * pa)),
+            ui_text_center(FONT_MENU, 13, 1.2f, X + UI_W / 2, 230, 24, rgba(0xc9, 0xd2, 0xee, (u8)(255 * pa)),
                            "Put photos in the DCIM folder, or send some with Transfer.");
     } else {
-        gfx_set_clip(X + 26, 90, 588, 3 * (CH + GY) + 6);
+        gfx_set_clip(X + 26, 90, UI_W - 52, 3 * (CH + GY) + 6);
         int first_row = (int)scroll;
         bool swirl_now = open < swirl_done;
         for (int r = first_row; r <= first_row + (swirl_now ? ROWS - 1 : ROWS); r++) {
@@ -242,7 +247,7 @@ static void album_draw(float open) {
                 }
                 if (swirling) {
                     ui_swirl_end();
-                    gfx_set_clip(X + 26, 90, 588, 3 * (CH + GY) + 6);
+                    gfx_set_clip(X + 26, 90, UI_W - 52, 3 * (CH + GY) + 6);
                 }
             }
         }
@@ -270,8 +275,7 @@ static void album_draw(float open) {
     /* description */
     float da = ramp(open, swirl_done - 0.5f, swirl_done - 0.1f);
     float dy = 374 + 16 * (1 - ease_out(da));
-    ui_desc(X + 32, dy, 576, 34, da);
-    Color dc = rgba(0xec, 0xeb, 0xff, (u8)(255 * da)), dc2 = rgba(0xc9, 0xc6, 0xff, (u8)(255 * da));
+    ui_desc(X + 32, dy, UI_W - 64, 34, da);
     if (n > 0 && !(tab == TAB_FOLDERS && folder_open < 0)) {
         Photo *p = photos_get(g_view[g_view_pos]);
         if (p) {
@@ -279,18 +283,14 @@ static void album_draw(float open) {
             photos_format_date(p, date, sizeof(date));
             if (p->w) snprintf(info, sizeof(info), "%s \x7f %d \x80 %d", date, p->w, p->h);
             else snprintf(info, sizeof(info), "%s", date);
-            char name[48];
-            snprintf(name, sizeof(name), "%s", p->name);
-            ui_text(FONT_MENU, 13, 1.2f, X + 44, dy, 34, dc, name);
-            ui_text_right(FONT_MENU, 13, 1.2f, X + 596, dy, 34, dc2, info);
+            ui_desc_texts(X + 32, dy, UI_W - 64, 34, p->name, info, da);
         }
     } else if (n > 0) {
         const Folder *f = photos_folder(folder_sel);
         if (f) {
-            ui_text(FONT_MENU, 13, 1.2f, X + 44, dy, 34, dc, f->name);
             char c[32];
             snprintf(c, sizeof(c), "%d photo%s", f->count, f->count == 1 ? "" : "s");
-            ui_text_right(FONT_MENU, 13, 1.2f, X + 596, dy, 34, dc2, c);
+            ui_desc_texts(X + 32, dy, UI_W - 64, 34, f->name, c, da);
         }
     }
 

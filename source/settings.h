@@ -11,6 +11,8 @@ typedef struct {
     int  http_port;
     /* Display */
     int  video_mode, widescreen, full_width;
+    int  margin;           /* screen margin for overscan, percent (0..12) */
+    int  intro;            /* play the opening animation */
     /* Sound */
     int  sounds, volume;
     char music_sf2[256];   /* "" = first .sf2 in sd:/midi, "builtin", or a file */
@@ -22,6 +24,8 @@ typedef struct {
     int  ss_music;         /* play the music folder during slideshows */
     /* Album */
     int  sort_newest;      /* newest photos first */
+    /* Leaving */
+    char swiss_dol[256];   /* Swiss, started by "Exit to Swiss" (found on the card if moved) */
 } Settings;
 
 enum { SS_FADE, SS_PANZOOM, SS_CUBE };

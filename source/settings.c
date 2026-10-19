@@ -15,13 +15,13 @@ static const Key keys[] = {
     I("net.dhcp", dhcp, 0, 1), S("net.ip", ip), S("net.netmask", netmask), S("net.gateway", gateway),
     S("net.dns", dns), I("net.port", http_port, 1, 65535),
     I("display.video", video_mode, 0, 2), I("display.widescreen", widescreen, 0, 1),
-    I("display.full_width", full_width, 0, 1),
+    I("display.full_width", full_width, 0, 1), I("display.margin", margin, 0, 12), I("display.intro", intro, 0, 1),
     I("sound.menu", sounds, 0, 1), I("sound.volume", volume, 0, 10),
     S("music.soundfont", music_sf2), I("music.volume", music_volume, 0, 10),
     I("music.shuffle", music_shuffle, 0, 1), I("music.repeat", music_repeat, 0, 1),
     I("slideshow.transition", ss_transition, 0, 2), I("slideshow.seconds", ss_seconds, 3, 20),
     I("slideshow.shuffle", ss_shuffle, 0, 1), I("slideshow.music", ss_music, 0, 1),
-    I("album.newest_first", sort_newest, 0, 1),
+    I("album.newest_first", sort_newest, 0, 1), S("exit.dol", swiss_dol),
 };
 #define NKEYS (int)(sizeof(keys) / sizeof(keys[0]))
 
@@ -33,6 +33,8 @@ void settings_defaults(Settings *s) {
     s->video_mode = 0;
     s->widescreen = 0;
     s->full_width = 1;
+    s->margin = 3;
+    s->intro = 1;
     s->sounds = 1;
     s->volume = 7;
     s->music_volume = 7;
@@ -42,6 +44,7 @@ void settings_defaults(Settings *s) {
     s->ss_shuffle = 0;
     s->ss_music = 1;
     s->sort_newest = 1;
+    snprintf(s->swiss_dol, sizeof(s->swiss_dol), "sd:/ipl.dol");
 }
 
 static void trim(char *s) {

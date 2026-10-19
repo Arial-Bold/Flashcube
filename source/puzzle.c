@@ -153,8 +153,9 @@ static void puzzle_draw(float open) {
     (void)open;
     float X = UI_X;
     ui_background_grid(1);
-    ui_panel(X + 22, 18, 596, 400, 1);
-    ui_ptitle(X + 22, 18, 596, "Photo Puzzle", NULL, 1);
+    ui_panel(X + 22, 18, UI_W - 44, 400, 1);
+    ui_ptitle(X + 22, 18, UI_W - 44, "Photo Puzzle", NULL, 1);
+    X = UI_X + (UI_W - 640) / 2;   /* the board and its column, centred */
     float bx = X + BX, by = BY;
     gfx_rect(bx - 8, by - 8, BW + 16, BH + 16, rgba(200, 208, 220, 153));
     gfx_rect(bx - 6, by - 6, BW + 12, BH + 12, rgba(10, 13, 16, 255));
@@ -229,7 +230,7 @@ static void puzzle_draw(float open) {
     ui_text_center(FONT_MENU, 11, 1, rx + 12 + 48, sy + 112, 18, COL_SOFT, "Y");
     ui_text_center(FONT_MENU, 11, 1, rx + rw - 60, sy + 112, 18, COL_SOFT, "hold Z");
 
-    ui_desc(X + 32, 366, 576, 42, 1);
+    ui_desc(UI_X + 32, 366, UI_W - 64, 42, 1);
     char msg[120];
     if (win_t >= 0) {
         char t[16];
@@ -238,7 +239,7 @@ static void puzzle_draw(float open) {
     } else {
         snprintf(msg, sizeof(msg), "Slide the tiles back into place to rebuild the photo. X changes the size.");
     }
-    ui_text(FONT_MENU, 13, 1.2f, X + 44, 366, 42, rgba(0xec, 0xeb, 0xff, 255), msg);
+    ui_text_fit_scroll(FONT_MENU, 13, 1.2f, UI_X + 44, 366, UI_W - 88, 42, rgba(0xec, 0xeb, 0xff, 255), msg);
     const char *h[] = { "DP:Select", "Z:Peek", "X:Size", "B:Back", "A:Slide" };
     ui_hints(h, 5, 1, -1);
 }

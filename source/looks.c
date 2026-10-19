@@ -45,7 +45,7 @@ static void looks_leave(void) {
 /* the photo shrunk to fit the preview (box-averaged) */
 static void make_base(void) {
     const Picture *p = &req.pic;
-    float s = fminf(400.0f / p->w, 300.0f / p->h);
+    float s = fminf(600.0f / p->w, 300.0f / p->h);
     if (s > 1) s = 1;
     bw = (int)(p->w * s); bh = (int)(p->h * s);
     if (bw < 4) bw = 4;
@@ -103,7 +103,7 @@ static void looks_update(void) {
             char msg[96];
             int lk = look;
             int idx = game_save_picture(&req.pic, "LOOK", lk ? look_px : NULL, &lk, msg, sizeof(msg));
-            sound_play(idx >= 0 ? SFX_LOADED : SFX_ERROR);
+            sound_play(idx >= 0 ? SFX_CONFIRM : SFX_ERROR);
             app_toast(msg);
         }
         return;
@@ -132,9 +132,9 @@ static void looks_draw(float open) {
         ui_text(FONT_MENU, 13, 1.3f, X + 36, y, 28, COL_TEXT, look_names[i]);
     }
     /* the preview, in a frame the photo's shape */
-    float fw = 400, fh = 300;
-    if (base) { float s = fminf(400.0f / bw, 300.0f / bh); fw = bw * s; fh = bh * s; }
-    float fx = X + 200 + (420 - fw) / 2, fy = 22 + (320 - fh) / 2;
+    float aw = UI_W - 220, fw = aw - 20, fh = 300;
+    if (base) { float s = fminf((aw - 20) / bw, 300.0f / bh); fw = bw * s; fh = bh * s; }
+    float fx = X + 200 + (aw - fw) / 2, fy = 22 + (320 - fh) / 2;
     gfx_shadow(fx - 5, fy + 5, fw + 10, fh + 10, 2, 14, rgba(0, 0, 0, 130));
     gfx_rect(fx - 8, fy - 8, fw + 16, fh + 16, rgba(200, 208, 220, 153));
     gfx_rect(fx - 6, fy - 6, fw + 12, fh + 12, rgba(10, 13, 16, 255));
@@ -148,9 +148,9 @@ static void looks_draw(float open) {
     } else {
         ui_spinner(fx + fw / 2, fy + fh / 2, 14, g_time, 1);
     }
-    ui_desc(X + 20, 342, 600, 56, 1);
+    ui_desc(X + 20, 342, UI_W - 40, 56, 1);
     ui_text(FONT_MENU_BOLD, 14, 1.3f, X + 32, 346, 22, rgba(0xec, 0xeb, 0xff, 255), look_names[look]);
-    ui_text(FONT_MENU, 13, 1.2f, X + 32, 368, 24, rgba(0xc9, 0xc6, 0xff, 255), look_help[look]);
+    ui_text_fit_scroll(FONT_MENU, 13, 1.2f, X + 32, 368, UI_W - 64, 24, rgba(0xc9, 0xc6, 0xff, 255), look_help[look]);
     const char *h[] = { "S:Select", "B:Back", "A:Save a Copy" };
     ui_hints(h, 3, 1, input_stick_dir());
     if (saving > 0) ui_message("Saving", "Saving a copy with this look...", 1);

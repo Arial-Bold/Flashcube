@@ -3,14 +3,14 @@
  * titles, highlighted rows, radio buttons, silver/gold buttons, the purple
  * description bar and the controller hints along the bottom.
  *
- * Screens are laid out on a 640x480 design; in 16:9 the design is centred
- * (UI_X) and backgrounds fill the full width. */
+ * Screens lay out across the whole width (UI_W: 640 in 4:3, 854 in 16:9). */
 #pragma once
 #include <stdbool.h>
 #include "gfx.h"
 
-extern float UI_X;            /* left edge of the 640-wide design area */
-void ui_frame_begin(void);    /* updates UI_X */
+extern float UI_X;            /* left edge of the layout (0) */
+extern float UI_W;            /* layout width: 640 in 4:3, 854 in 16:9 */
+void ui_frame_begin(void);    /* updates UI_W */
 
 /* Colours used throughout. */
 #define COL_TITLE  rgba(0x73, 0x92, 0xff, 255)
@@ -27,14 +27,21 @@ float ui_text_center(FontId f, float size, float spacing, float cx, float top, f
 void  ui_text_glow(FontId f, float size, float spacing, float x, float top, float h, Color c, Color glow, float glow_px,
                    const char *s);
 
-void ui_background_grid(float alpha);          /* black with the fine 6px grid */
+void ui_background_grid(float alpha);          /* the same background as the cube screen, fading in */
 void ui_background_cube(void);                 /* the cube screen's darker 24px grid and vignette */
+void ui_background_cube_a(float alpha);
+/* Text that scrolls back and forth when it's wider than w (clipped to the box).
+ * Returns the width used. Call ui_text_scroll_tick() once per frame. */
+float ui_text_fit_scroll(FontId f, float size, float spacing, float x, float top, float w, float h, Color c, const char *s);
+void  ui_text_scroll_tick(void);
 void ui_panel(float x, float y, float w, float h, float alpha);
 void ui_ptitle(float px, float py, float pw, const char *left, const char *right, float alpha);
 void ui_row(float x, float y, float w, float h, bool on, float alpha);
 void ui_radio(float x, float cy, bool on, float alpha);
 void ui_button(float x, float y, float w, float h, const char *label, bool on, float alpha);
 void ui_desc(float x, float y, float w, float h, float alpha);
+/* Left and right text in a description bar (the left part scrolls if long). */
+void ui_desc_texts(float x, float y, float w, float h, const char *left, const char *right, float alpha);
 void ui_thumb_frame(float x, float y, float w, float h, float alpha);
 void ui_gold_ring(float x, float y, float w, float h, float pulse, float alpha);
 

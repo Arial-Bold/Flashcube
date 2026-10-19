@@ -27,6 +27,12 @@ void  gfx_set_widescreen(bool wide);
 bool  gfx_widescreen(void);
 float gfx_width(void);   /* 640 or 854 */
 float gfx_height(void);  /* 480 */
+/* Screen margin for TVs that cut off the edges (overscan): the design area
+ * is shrunk by this part of its size on each side (0 .. 0.15). */
+void  gfx_set_margin(float m);
+/* The whole visible screen in design units (bigger than 0..width, 0..480
+ * when there is a margin): for backgrounds and full-screen pictures. */
+void  gfx_full_area(float *x, float *y, float *w, float *h);
 const char *gfx_mode_name(void);
 
 void gfx_begin_frame(void);

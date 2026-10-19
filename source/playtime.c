@@ -161,8 +161,8 @@ static void play_draw(float open) {
     float X = UI_X;
     ui_background_grid(ramp(open, 0, 0.35f));
     float pa = ramp(open, 0.45f, 0.85f);
-    ui_panel(X + 22, 18, 596, 400, pa);
-    ui_ptitle(X + 22, 18, 596, "Playtime", photo >= 0 ? "Pick a game for this photo" : "Pick a game", pa);
+    ui_panel(X + 22, 18, UI_W - 44, 400, pa);
+    ui_ptitle(X + 22, 18, UI_W - 44, "Playtime", photo >= 0 ? "Pick a game for this photo" : "Pick a game", pa);
     static const char *names[3] = { "Photo Puzzle", "Doodle", "Color Looks" };
     static const char *subs[3] = { "Slide tiles back", "Draw on a photo", "Sepia, mono, pop..." };
     static const char *help[3] = { "Slide the tiles back into place to rebuild the photo.",
@@ -170,7 +170,7 @@ static void play_draw(float open) {
                                    "Give a photo a new look and save it as a copy." };
     float done = ui_swirl_duration(3);
     for (int k = 0; k < 3; k++) {
-        float x = X + 48 + k * 184, y = 62, w = 172, h = 256;
+        float gap = UI_W > 700 ? 44 : 12, x = X + UI_W / 2 - (3 * 172 + 2 * gap) / 2 + k * (172 + gap), y = 62, w = 172, h = 256;
         float a = 1;
         bool sw = open < done;
         if (sw) a = ui_swirl_begin(k, 3, x, y, w, h, open, 95, 20);
@@ -191,8 +191,8 @@ static void play_draw(float open) {
     }
     float da = ramp(open, done - 0.5f, done - 0.1f);
     float dy = 356 + 16 * (1 - ease_out(da));
-    ui_desc(X + 32, dy, 576, 42, da);
-    ui_text(FONT_MENU, 13, 1.2f, X + 44, dy, 42, rgba(0xec, 0xeb, 0xff, (u8)(255 * da)), help[card]);
+    ui_desc(X + 32, dy, UI_W - 64, 42, da);
+    ui_text_fit_scroll(FONT_MENU, 13, 1.2f, X + 44, dy, UI_W - 88, 42, rgba(0xec, 0xeb, 0xff, (u8)(255 * da)), help[card]);
     const char *h[] = { "S:Select", "B:Back", "A:Confirm" };
     ui_hints(h, 3, ramp(open, done - 0.4f, done), input_stick_dir());
 }

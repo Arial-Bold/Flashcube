@@ -22,6 +22,7 @@ static int fb;
 static GXRModeObj *rmode;
 static bool wide;
 static float vw = 640.0f;
+static float margin;          /* screen margin (overscan): part of the width/height kept clear on each side */
 /* 2D transform */
 static float t_a = 1, t_b = 0, t_c = 0, t_d = 1, t_tx = 0, t_ty = 0;
 static bool t_rotated;
@@ -179,6 +180,13 @@ void gfx_set_widescreen(bool w) {
 }
 
 bool gfx_widescreen(void) { return wide; }
+
+void gfx_set_margin(float m) { margin = m < 0 ? 0 : m > 0.15f ? 0.15f : m; }
+
+void gfx_full_area(float *x, float *y, float *w, float *h) {
+    float mx = vw * margin, my = 480.0f * margin;
+    *x = -mx; *y = -my; *w = vw + 2 * mx; *h = 480 + 2 * my;
+}
 float gfx_width(void) { return vw; }
 float gfx_height(void) { return 480.0f; }
 
@@ -202,7 +210,10 @@ static void load_matrix(void) {
 
 void gfx_begin_frame(void) {
     Mtx44 proj;
-    guOrtho(proj, 0, 480, 0, vw, 0, 300);
+    /* the design area (0..vw, 0..480) is shrunk into the middle of the
+     * screen by the margin; backgrounds draw past it (gfx_full_area) */
+    float mx = vw * margin, my = 480.0f * margin;
+    guOrtho(proj, -my, 480 + my, -mx, vw + mx, 0, 300);
     GX_LoadProjectionMtx(proj, GX_ORTHOGRAPHIC);
     p3d = false;
     gfx_reset_transform();
@@ -301,9 +312,10 @@ void gfx_set_clip(float x, float y, float w, float h) {
     if (!isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h)) { gfx_clear_clip(); return; }
     float x0 = x * t_a + t_tx, y0 = y * t_d + t_ty;
     float x1 = (x + w) * t_a + t_tx, y1 = (y + h) * t_d + t_ty;
-    float kx = rmode->fbWidth / vw, ky = rmode->efbHeight / 480.0f;
-    int px = (int)(x0 * kx), py = (int)(y0 * ky);
-    int pw = (int)(x1 * kx) - px, ph = (int)(y1 * ky) - py;
+    float mx = vw * margin, my = 480.0f * margin;
+    float kx = rmode->fbWidth / (vw + 2 * mx), ky = rmode->efbHeight / (480.0f + 2 * my);
+    int px = (int)((x0 + mx) * kx), py = (int)((y0 + my) * ky);
+    int pw = (int)((x1 + mx) * kx) - px, ph = (int)((y1 + my) * ky) - py;
     if (px < 0) { pw += px; px = 0; }
     if (py < 0) { ph += py; py = 0; }
     if (px > rmode->fbWidth - 1) px = rmode->fbWidth - 1;
@@ -399,10 +411,11 @@ static inline void vtx(float x, float y, Color c) {
 static void guard_bounds(float *x0, float *y0, float *x1, float *y1) {
     if (p3d || t_rotated) { *x0 = *y0 = -50000; *x1 = *y1 = 50000; return; }
     float sx = t_a > 0.01f ? t_a : 0.01f, sy = t_d > 0.01f ? t_d : 0.01f;
-    *x0 = (-GUARD - t_tx) / sx;
-    *x1 = (vw + GUARD - t_tx) / sx;
-    *y0 = (-GUARD - t_ty) / sy;
-    *y1 = (480.0f + GUARD - t_ty) / sy;
+    float mx = vw * margin, my = 480.0f * margin;
+    *x0 = (-GUARD - mx - t_tx) / sx;
+    *x1 = (vw + GUARD + mx - t_tx) / sx;
+    *y0 = (-GUARD - my - t_ty) / sy;
+    *y1 = (480.0f + GUARD + my - t_ty) / sy;
 }
 
 void gfx_rect(float x, float y, float w, float h, Color c) { gfx_rect_vgrad(x, y, w, h, c, c); }

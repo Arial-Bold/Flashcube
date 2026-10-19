@@ -7,10 +7,11 @@
 #include <stdio.h>
 #include <string.h>
 
-float UI_X = 0;
+float UI_X = 0, UI_W = 640;
 float g_time, g_dt;
 
-void ui_frame_begin(void) { UI_X = (gfx_width() - 640.0f) * 0.5f; }
+/* Screens lay out across the whole width: 640 in 4:3, 854 in 16:9. */
+void ui_frame_begin(void) { UI_X = 0; UI_W = gfx_width(); }
 
 /* ------------------------------------------------------------------ text */
 
@@ -48,22 +49,20 @@ void ui_text_glow(FontId f, float size, float sp, float x, float top, float h, C
 
 /* ----------------------------------------------------------- backgrounds */
 
-void ui_background_grid(float alpha) {
+/* The cube screen's background: dark, a 24px grid of 2px lines and a soft
+ * vignette. Every screen uses it, so moving between them never changes it. */
+void ui_background_cube_a(float alpha) {
     if (alpha <= 0) return;
-    float W = gfx_width();
-    gfx_rect(0, 0, W, 480, rgba(3, 3, 5, (u8)(255 * clamp01(alpha))));
-    Color line = rgba(255, 255, 255, (u8)(0.055f * 255 * alpha));
-    for (float x = 0; x < W; x += 6) gfx_rect(x, 0, 1, 480, line);
-    for (float y = 0; y < 480; y += 6) gfx_rect(0, y, W, 1, line);
-}
-
-void ui_background_cube(void) {
-    float W = gfx_width();
-    gfx_rect(0, 0, W, 480, rgba(6, 6, 8, 255));
-    Color line = rgba(0x25, 0x25, 0x2b, 255);
-    float x0 = fmodf((W - 640) * 0.5f, 24.0f);
-    for (float x = x0 - 24; x < W; x += 24) gfx_rect(x, 0, 2, 480, line);
-    for (float y = 0; y < 480; y += 24) gfx_rect(0, y, W, 2, line);
+    float fx, fy, fw, fh;
+    gfx_full_area(&fx, &fy, &fw, &fh);
+    u8 A = (u8)(255 * clamp01(alpha));
+    gfx_rect(fx, fy, fw, fh, rgba(6, 6, 8, A));
+    Color line = rgba(0x25, 0x25, 0x2b, A);
+    /* lines line up on the screen's middle, whatever its width */
+    float cx = gfx_width() / 2, cy = 240;
+    float x0 = cx - 24 * ceilf((cx - fx) / 24), y0 = cy - 24 * ceilf((cy - fy) / 24);
+    for (float x = x0; x < fx + fw; x += 24) gfx_rect(x, fy, 2, fh, line);
+    for (float y = y0; y < fy + fh; y += 24) gfx_rect(fx, y, fw, 2, line);
     /* vignette: radial-gradient(ellipse, transparent 40%, rgba(0,0,0,.6)) */
     enum { C = 12, R = 10 };
     float xy[(C + 1) * (R + 1) * 2];
@@ -71,14 +70,60 @@ void ui_background_cube(void) {
     for (int j = 0; j <= R; j++)
         for (int i = 0; i <= C; i++) {
             int k = j * (C + 1) + i;
-            float x = W * i / C, y = 480.0f * j / R;
+            float x = fx + fw * i / C, y = fy + fh * j / R;
             xy[k * 2] = x; xy[k * 2 + 1] = y;
-            float dx = (x - W / 2) / (W / 2 * 1.414f), dy = (y - 240) / (240 * 1.414f);
+            float dx = (x - (fx + fw / 2)) / (fw / 2 * 1.414f), dy = (y - (fy + fh / 2)) / (fh / 2 * 1.414f);
             float d = sqrtf(dx * dx + dy * dy);
-            float a = d < 0.4f ? 0 : (d - 0.4f) / 0.6f * 0.6f;
-            col[k] = rgba(0, 0, 0, (u8)(clamp01(a) * 255));
+            float v = d < 0.4f ? 0 : (d - 0.4f) / 0.6f * 0.6f;
+            col[k] = rgba(0, 0, 0, (u8)(clamp01(v) * 255 * clamp01(alpha)));
         }
     gfx_mesh(C, R, xy, col);
+}
+
+void ui_background_cube(void) { ui_background_cube_a(1); }
+void ui_background_grid(float alpha) { ui_background_cube_a(alpha); }
+
+/* ------------------------------------------------------- scrolling text */
+
+/* Text wider than its box scrolls along it and back, with pauses at each
+ * end (as in CubeBrowser). Each text keeps its own start time while shown. */
+typedef struct { unsigned key; float start; unsigned last_frame; } Scroll;
+static Scroll scrolls[24];
+static unsigned frame_count;
+
+void ui_text_scroll_tick(void) { frame_count++; }
+
+static float scroll_offset(const char *s, float x, float top, float over) {
+    unsigned h = 2166136261u;
+    for (const char *p = s; *p; p++) h = (h ^ (unsigned char)*p) * 16777619u;
+    h ^= (unsigned)(x * 7) * 2654435761u ^ (unsigned)(top * 13);
+    Scroll *sc = NULL, *old = &scrolls[0];
+    for (int i = 0; i < 24; i++) {
+        if (scrolls[i].key == h) { sc = &scrolls[i]; break; }
+        if (scrolls[i].last_frame < old->last_frame) old = &scrolls[i];
+    }
+    if (!sc || sc->last_frame + 2 < frame_count) {
+        if (!sc) sc = old;
+        sc->key = h;
+        sc->start = g_time;
+    }
+    sc->last_frame = frame_count;
+    const float pause = 1.6f, speed = 32.0f;
+    float travel = over / speed, period = pause * 2 + travel;
+    float t = fmodf(g_time - sc->start, period);
+    if (t < pause) return 0;
+    if (t < pause + travel) return (t - pause) * speed;
+    return over;
+}
+
+float ui_text_fit_scroll(FontId f, float size, float sp, float x, float top, float w, float h, Color c, const char *s) {
+    float tw = gfx_text_width_sp(f, size, sp, s, -1);
+    if (tw <= w) { ui_text(f, size, sp, x, top, h, c, s); return tw; }
+    float off = scroll_offset(s, x, top, tw - w);
+    gfx_set_clip(x, top - 4, w, h + 8);
+    ui_text(f, size, sp, x - off, top, h, c, s);
+    gfx_clear_clip();
+    return w;
 }
 
 /* ----------------------------------------------------------------- panels */
@@ -274,7 +319,7 @@ float ui_hint_width(const char *hint, bool big) { return hint_draw(hint, 0, 0, 1
 void ui_hints(const char *const *hints, int n, float al, int stick_dir) {
     if (al <= 0 || n <= 0) return;
     /* spread between the margins, like the system menu */
-    float left = UI_X + 24, right = UI_X + 640 - 24, cy = 480 - 22 - 12;
+    float left = UI_X + 24, right = UI_X + UI_W - 24, cy = 480 - 22 - 12;
     float total = 0;
     for (int i = 0; i < n; i++) total += ui_hint_width(hints[i], false);
     float gap = n > 1 ? (right - left - total) / (n - 1) : 0;
@@ -296,7 +341,7 @@ void ui_hints_center(const char *const *hints, int n, float y, float gap, float 
 
 void ui_message(const char *title, const char *text, float al) {
     if (al <= 0) return;
-    float w = 420, h = 150, x = UI_X + 320 - w / 2, y = 240 - h / 2 - 20;
+    float w = 420, h = 150, x = UI_X + UI_W / 2 - w / 2, y = 240 - h / 2 - 20;
     gfx_rect(0, 0, gfx_width(), 480, rgba(0, 0, 0, (u8)(0.45f * 255 * al)));
     ui_panel(x, y, w, h, al);
     ui_ptitle(x, y, w, title, NULL, al);
@@ -361,3 +406,12 @@ float ui_swirl_begin(int i, int n, float x, float y, float w, float h, float t, 
 }
 
 void ui_swirl_end(void) { gfx_reset_transform(); }
+
+/* A description bar's text: the right part in full, the left part in the
+ * space left (scrolling if it doesn't fit). */
+void ui_desc_texts(float x, float y, float w, float h, const char *left, const char *right, float al) {
+    Color c1 = rgba(0xec, 0xeb, 0xff, (u8)(255 * al)), c2 = rgba(0xc9, 0xc6, 0xff, (u8)(255 * al));
+    float rw = 0;
+    if (right && right[0]) rw = ui_text_right(FONT_MENU, 13, 1.2f, x + w - 12, y, h, c2, right) + 20;
+    if (left && left[0]) ui_text_fit_scroll(FONT_MENU, 13, 1.2f, x + 12, y, w - 24 - rw, h, c1, left);
+}

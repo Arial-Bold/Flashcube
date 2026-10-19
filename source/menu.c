@@ -22,6 +22,8 @@ static float intro_t;
 static CubeView cv;
 static int side, queued_side = -1;
 static float icon_clock;
+static float exit_armed_until;
+static bool intro_skip, start_played;
 
 #define TURN_IN_S 0.95f
 #define TURN_OUT_S 0.8f
@@ -103,6 +105,8 @@ static void menu_enter(int arg) {
     cube_view_init(&cv);
     intro_t = 0;
     set_state(M_INTRO);
+    intro_skip = !g_set.intro;
+    start_played = false;   /* no logo: the cube just fades in */
 }
 
 static void start_turn(int s) {
@@ -110,7 +114,7 @@ static void start_turn(int s) {
     cv.side = s;
     icon_clock = 0;
     set_state(M_TURN_IN);
-    sound_play(SFX_HOVER);
+    sound_play(SFX_TURN_SIDE);
 }
 
 static void menu_update(void) {
@@ -124,13 +128,19 @@ static void menu_update(void) {
     case M_INTRO:
         intro_t += g_dt;
         if (input_pressed(BTN_A | BTN_START | BTN_B)) intro_t = logo_duration();
-        if (intro_t >= logo_duration()) set_state(M_NAV);
+        if (!start_played && intro_t >= (intro_skip ? 0.1f : 5.4f)) { start_played = true; sound_play(SFX_START); }
+        if (intro_t >= (intro_skip ? 1.0f : logo_duration())) set_state(M_NAV);
         break;
     case M_NAV: {
         int s = dir_to_side(input_stick_dir());
         if (s < 0) s = dir_to_side(input_dir());
         if (s >= 0) start_turn(s);
-        else if (input_pressed(BTN_START)) { sound_play(SFX_OPEN); settings_panel_open(); }
+        else if (input_pressed(BTN_START)) { sound_play(SFX_SELECT); settings_panel_open(); }
+        else if (input_pressed(BTN_B)) {
+            /* B twice: back to Swiss */
+            if (g_time < exit_armed_until) { exit_armed_until = 0; app_exit_to_swiss(); }
+            else { exit_armed_until = g_time + 3; sound_play(SFX_BACK); app_toast("Press B again to exit to Swiss"); }
+        }
         break;
     }
     case M_TURN_IN:
@@ -139,17 +149,18 @@ static void menu_update(void) {
     case M_CHOSEN: {
         int s = dir_to_side(input_dir());
         if (input_pressed(BTN_A)) {
-            sound_play(SFX_SELECT);
+            sound_play(SFX_OPEN);
             const Screen *scr = app_screen_def(side_screen[side]);
             g_pick_for = PICK_NONE;
             scr->enter(0);
             set_state(M_OPENING);
         } else if (input_pressed(BTN_B) || (s >= 0 && s == opposite(side))) {
-            sound_play(SFX_BACK);
+            sound_play(SFX_TURN_CENTER);
             queued_side = -1;
             set_state(M_TURN_OUT);
         } else if (s >= 0 && s != side) {
             queued_side = s;          /* turn back, then on to the other side */
+            sound_play(SFX_TURN_CENTER);
             set_state(M_TURN_OUT);
         }
         break;
@@ -172,7 +183,7 @@ static void menu_update(void) {
     }
     case M_RETURN:
         if (st >= 0.45f) set_state(M_CHOSEN);
-        else if (input_pressed(BTN_B)) { set_state(M_TURN_OUT); queued_side = -1; }
+        else if (input_pressed(BTN_B)) { sound_play(SFX_TURN_CENTER); set_state(M_TURN_OUT); queued_side = -1; }
         break;
     }
 }
@@ -188,11 +199,19 @@ static void menu_draw(float open) {
     cv.icon_time = icon_clock;
     switch (state) {
     case M_INTRO:
+        cv.turn = 0;
+        cv.icon = 0;
+        if (intro_skip) {
+            cv.alpha = ease_out(clamp01(intro_t / 0.5f));
+            cv.scale = 0.92f + 0.08f * cv.alpha;
+            cv.labels = clamp01((intro_t - 0.3f) / 0.4f);
+            cv.sway = 1;
+            hints = clamp01((intro_t - 0.5f) / 0.4f);
+            break;
+        }
         logo_draw(intro_t);
         cv.alpha = logo_nav_alpha(intro_t);
         cv.labels = logo_labels_alpha(intro_t);
-        cv.turn = 0;
-        cv.icon = 0;
         cv.sway = clamp01((intro_t - 6.2f) / 2.0f);
         hints = logo_hints_alpha(intro_t);
         break;
@@ -258,8 +277,8 @@ static void menu_draw(float open) {
             d = c < 0.2f ? -1 : c < 0.9f ? DIR_UP : c < 1.2f ? -1 : c < 1.9f ? DIR_RIGHT : c < 2.2f ? -1 : c < 2.9f ? DIR_DOWN
                 : c < 3.2f ? -1 : c < 3.9f ? DIR_LEFT : -1;
         }
-        const char *h[] = { "S:Menu Selection", "ST:Settings" };
-        ui_hints_center(h, state == M_NAV ? 2 : 1, 480 - 34 - 13, 40, hints, d, true);
+        const char *h[] = { "S:Menu Selection", "ST:Settings", "B:Exit to Swiss" };
+        ui_hints_center(h, state == M_NAV ? 3 : 1, 480 - 34 - 13, 36, hints, d, true);
     } else {
         const char *h[] = { "B:Cancel", "A:Confirm" };
         ui_hints_center(h, 2, 480 - 34 - 13, 34, hints, -1, true);

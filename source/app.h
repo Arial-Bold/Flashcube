@@ -26,6 +26,8 @@ ScreenId app_screen(void);
 const Screen *app_screen_def(ScreenId s);
 void app_adopt(ScreenId s, float already_open);
 void app_init(void);
+/* Starts Swiss (false, with a message shown, if it couldn't). */
+bool app_exit_to_swiss(void);
 void app_frame(void);
 
 /* The current album view: photo indexes in display order. */

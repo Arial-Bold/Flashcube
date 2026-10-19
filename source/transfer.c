@@ -58,7 +58,7 @@ static void transfer_draw(float open) {
     float X = UI_X;
     ui_background_grid(ramp(open, 0, 0.35f));
     float pa = ramp(open, 0.45f, 0.85f);
-    float px = X + 22, py = 18, pw = 596, ph = 400;
+    float px = X + 22, py = 18, pw = UI_W - 44, ph = 400;
     ui_panel(px, py, pw, ph, pa);
     NetState st = net_state();
     char right[96];
@@ -122,16 +122,13 @@ static void transfer_draw(float open) {
         gfx_rect(x + 10, y + 3, 38, 28, rgba(0x0b, 0x0f, 0x12, (u8)(255 * a)));
         if (i < n) {
             if (tr[i].photo >= 0) app_draw_thumb(tr[i].photo, x + 12, y + 5, 34, 24, a);
-            char name[40];
-            snprintf(name, sizeof(name), "%s", tr[i].name);
-            if (strlen(name) > 20) strcpy(name + 17, "...");
-            ui_text(FONT_MENU, 13, 1.3f, x + 58, y + 2, 16, tc, name);
             char status[48];
             Color sc = rgba(0xc9, 0xd2, 0xee, (u8)(255 * a));
             if (tr[i].state == 2) { snprintf(status, sizeof(status), tr[i].to_phone ? "Sent to phone" : "Done"); sc = rgba(0x8f, 0xe0, 0xa8, (u8)(255 * a)); }
             else if (tr[i].state == 3) { snprintf(status, sizeof(status), "Failed"); sc = rgba(0xff, 0x8c, 0xa0, (u8)(255 * a)); }
             else snprintf(status, sizeof(status), "%.1f / %.1f MB", tr[i].done / 1048576.0, tr[i].total / 1048576.0);
-            ui_text_right(FONT_MENU, 13, 1.3f, x + w - 10, y + 2, 16, sc, status);
+            float sw2 = ui_text_right(FONT_MENU, 13, 1.3f, x + w - 10, y + 2, 16, sc, status);
+            ui_text_fit_scroll(FONT_MENU, 13, 1.3f, x + 58, y + 2, w - 68 - sw2 - 14, 16, tc, tr[i].name);
             float frac = tr[i].total ? (float)tr[i].done / tr[i].total : 0;
             if (tr[i].state == 2) frac = 1;
             gfx_rrect(x + 58, y + 24, w - 68, 7, 2, rgba(0, 0, 0, (u8)(115 * a)));
@@ -156,7 +153,7 @@ static void transfer_draw(float open) {
     ui_desc(px + 10, dy, pw - 20, 64, da);
     Color dc = rgba(0xec, 0xeb, 0xff, (u8)(255 * da));
     if (st == NET_FAILED) {
-        ui_text(FONT_MENU, 13, 1.2f, px + 22, dy + 6, 24, dc, net_message());
+        ui_text_fit_scroll(FONT_MENU, 13, 1.2f, px + 22, dy + 6, pw - 44, 24, dc, net_message());
         ui_text(FONT_MENU, 13, 1.2f, px + 22, dy + 30, 24, dc, "Check the cable to your router, then open Transfer again.");
     } else {
         ui_text(FONT_MENU, 13, 1.2f, px + 22, dy + 6, 24, dc, "Scan the code with your phone's camera to send photos here or");

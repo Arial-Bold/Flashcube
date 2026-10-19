@@ -9,6 +9,7 @@
 #include "sound.h"
 #include "settings.h"
 #include "midi.h"
+#include "musicpanel.h"
 #include "cube.h"
 #include "m3d.h"
 #include <math.h>
@@ -92,6 +93,15 @@ static void change(int d) {
 
 static void setup_update(void) {
     sflash += g_dt;
+    if (music_panel_active()) {
+        music_panel_update();
+        if (!music_panel_active()) {
+            /* the panel may have changed the music: keep the row in step */
+            midi_stop();
+        }
+        return;
+    }
+    if (input_pressed(BTN_A) && srow == R_MUSIC) { sound_play(SFX_SELECT); music_panel_open(); return; }
     int d = input_dir();
     if (d == DIR_UP && srow > 0) { srow--; sound_play(SFX_HOVER); }
     else if (d == DIR_DOWN && srow < NR - 1) { srow++; sound_play(SFX_HOVER); }
@@ -124,7 +134,7 @@ static const char *row_help(void) {
              : "The photos turn like the sides of a cube.";
     case R_SECONDS: return "How long each photo stays on screen.";
     case R_ORDER: return g_set.ss_shuffle ? "Photos are shown in a random order." : "Photos are shown in the album's order.";
-    case R_MUSIC: return midi_count() ? "Music comes from the midi folder on the SD card (the same one CubeBrowser uses)."
+    case R_MUSIC: return midi_count() ? "Songs from the midi folder on the SD card. Press A for the music player."
                                       : "Put .mid songs in the midi folder on the SD card to hear music.";
     case R_PHOTOS: return "Which photos to show. Use left and right to choose.";
     default: return sbtn ? "Go back without starting." : "Start the slideshow. A pauses, B stops.";
@@ -135,7 +145,7 @@ static void setup_draw(float open) {
     float X = UI_X;
     ui_background_grid(ramp(open, 0, 0.35f));
     float pa = ramp(open, 0.45f, 0.85f);
-    float px = X + 40, py = 30, pw = 560, ph = 370;
+    float px = X + 40, py = 30, pw = UI_W - 80, ph = 370;
     ui_panel(px, py, pw, ph, pa);
     ui_ptitle(px, py, pw, "Slideshow", NULL, pa);
     int nitems = 7;
@@ -189,7 +199,7 @@ static void setup_draw(float open) {
     }
     /* buttons */
     for (int b = 0; b < 2; b++) {
-        float bw = b ? 98 : 108, x = b ? px + 323 : px + 145, y = py + ph - 64 - 28;
+        float bw = b ? 98 : 108, x = px + pw / 2 - 138 + (b ? 178 : 0), y = py + ph - 64 - 28;
         float a = 1;
         bool sw = open < done;
         if (sw) a = ui_swirl_begin(5 + b, nitems, x, y, bw, 28, open, 120, 12);
@@ -199,9 +209,10 @@ static void setup_draw(float open) {
     float da = ramp(open, done - 0.5f, done - 0.1f);
     float dy = py + ph - 10 - 42 + 16 * (1 - ease_out(da));
     ui_desc(px + 10, dy, pw - 20, 42, da);
-    ui_text(FONT_MENU, 13, 1.2f, px + 22, dy, 42, rgba(0xec, 0xeb, 0xff, (u8)(255 * da)), row_help());
+    ui_text_fit_scroll(FONT_MENU, 13, 1.2f, px + 22, dy, pw - 44, 42, rgba(0xec, 0xeb, 0xff, (u8)(255 * da)), row_help());
     const char *h[] = { "S:Select", "B:Back", "A:Confirm" };
-    ui_hints(h, 3, ramp(open, done - 0.4f, done), input_stick_dir());
+    ui_hints(h, 3, music_panel_active() ? 0 : ramp(open, done - 0.4f, done), input_stick_dir());
+    music_panel_draw();
 }
 
 const Screen screen_slidesetup = { setup_enter, setup_update, setup_draw, NULL };
@@ -272,7 +283,8 @@ static void show_enter(int arg) {
 static void show_leave(void) {
     photos_release_picture(&bufs[0]);
     photos_release_picture(&bufs[1]);
-    if (music_started) midi_stop();
+    music_panel_close();
+    if (music_started || midi_state() == MIDI_PLAYING || midi_state() == MIDI_PAUSED) midi_stop();
 }
 
 static void advance(int d) {
@@ -291,6 +303,12 @@ static void advance(int d) {
 
 static void show_update(void) {
     hint_t += g_dt;
+    if (input_any() || input_stick_dir() != DIR_NONE) hint_t = 0;   /* any button brings the hints back */
+    if (music_panel_active()) {
+        music_panel_update();
+        goto timing;
+    }
+    if (input_pressed(BTN_X)) { sound_play(SFX_SELECT); music_panel_open(); return; }
     if (input_pressed(BTN_B)) {
         sound_play(SFX_BACK);
         if (back_to >= 0) {
@@ -304,6 +322,7 @@ static void show_update(void) {
     if (input_pressed(BTN_A)) { paused = !paused; hint_t = 0; sound_play(SFX_SELECT); if (music_started) midi_toggle_pause(); }
     if (input_pressed(BTN_RIGHT) && trans_t < 0) { trans_t = 0; hint_t = 0; }
     if (input_pressed(BTN_LEFT) && trans_t < 0 && nlist > 1) { advance(-1); trans_t = -1; hint_t = 0; }
+timing:
     if (nlist == 0) return;
     if (trans_t >= 0) {
         trans_t += g_dt;
@@ -379,10 +398,11 @@ static void show_draw(float open) {
     float ha = paused ? 1 : clamp01((3.0f - hint_t) / 0.5f);
     if (ha > 0) {
         gfx_rect_vgrad(0, 400, gfx_width(), 80, rgba(0, 0, 0, 0), rgba(0, 0, 0, (u8)(170 * ha)));
-        const char *h[] = { "DP:Next", "B:Stop", paused ? "A:Play" : "A:Pause" };
-        ui_hints(h, 3, ha, -1);
+        const char *h[] = { "X:\x83 Music", "DP:Next", "B:Stop", paused ? "A:Play" : "A:Pause" };
+        ui_hints(h, 4, music_panel_active() ? 0 : ha, -1);
         if (paused) ui_text(FONT_MENU, 14, 1.2f, UI_X + 24, 24, 24, rgba(255, 255, 255, 220), "Paused");
     }
+    music_panel_draw();
 }
 
 const Screen screen_slideshow = { show_enter, show_update, show_draw, show_leave };

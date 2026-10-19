@@ -12,6 +12,8 @@
 #include "midi.h"
 #include "applog.h"
 #include "net.h"
+#include "dolload.h"
+#include <strings.h>
 #include "thr.h"
 #include "m3d.h"
 #include <stdio.h>
@@ -112,6 +114,36 @@ void app_prefetch_view(int pos, int ahead) {
     }
 }
 
+/* Leaves Flashcube for Swiss, as CubeBrowser does: the Swiss .dol from the
+ * settings, or the first swiss*.dol found on the card (remembered). */
+bool app_exit_to_swiss(void) {
+    char err[256];
+    settings_save();
+    if (!dol_check(g_set.swiss_dol, err, sizeof(err))) {
+        static char found[48][256];
+        int n = storage_ok() ? dol_find("sd:/", found, 48) : 0;
+        int pick = -1;
+        for (int i = 0; i < n && pick < 0; i++) {
+            const char *name = strrchr(found[i], '/');
+            name = name ? name + 1 : found[i];
+            if (!strncasecmp(name, "swiss", 5) && dol_check(found[i], err, sizeof(err))) pick = i;
+        }
+        if (pick < 0) {
+            app_toast("Swiss wasn't found on the SD card.");
+            sound_play(SFX_ERROR);
+            return false;
+        }
+        snprintf(g_set.swiss_dol, sizeof(g_set.swiss_dol), "%s", found[pick]);
+        settings_save();
+    }
+    if (!dol_launch(g_set.swiss_dol, err, sizeof(err))) {
+        app_toast(err);
+        sound_play(SFX_ERROR);
+        return false;
+    }
+    return true;
+}
+
 /* a photo arrived (or was saved) at index i: the album's list moves up */
 static void photo_inserted(int i) {
     for (int k = 0; k < g_view_count; k++) if (g_view[k] >= i) g_view[k]++;
@@ -141,6 +173,7 @@ void app_init(void) {
     bool sd = storage_init();
     settings_load();
     gfx_init(g_set.video_mode, g_set.widescreen != 0, g_set.full_width != 0);
+    gfx_set_margin(g_set.margin / 100.0f);
     input_init();
     sound_init();          /* also starts audio memory (ARAM) */
     midi_init();
@@ -189,6 +222,7 @@ void app_frame(void) {
 
     gfx_begin_frame();
     ui_frame_begin();
+    ui_text_scroll_tick();
     screens[cur]->draw(opened);
     app_draw_toast();
     if (fade > 0) gfx_rect(0, 0, gfx_width(), 480, rgba(0, 0, 0, (u8)(255 * clamp01(fade))));

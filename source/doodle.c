@@ -51,7 +51,7 @@ static void doodle_leave(void) { photos_release_picture(&req); }
 static void canvas(float *x, float *y, float *w, float *h) {
     float pw = 4, ph = 3;
     if (req.state == 2) { pw = req.pic.w; ph = req.pic.h; }
-    float mw = 404, mh = 290, s = fminf(mw / pw, mh / ph);
+    float mw = UI_W - 236, mh = 290, s = fminf(mw / pw, mh / ph);
     *w = pw * s; *h = ph * s;
     *x = UI_X + 44 + (mw - *w) / 2;
     *y = 62 + (mh - *h) / 2;
@@ -91,7 +91,7 @@ static void save(void) {
     char msg[96];
     int idx = game_save_rgb(rgb, W, H, "DOOD", msg, sizeof(msg));
     free(rgb);
-    sound_play(idx >= 0 ? SFX_LOADED : SFX_ERROR);
+    sound_play(idx >= 0 ? SFX_CONFIRM : SFX_ERROR);
     app_toast(msg);
     if (idx >= 0) saved_flash = 0;
 }
@@ -159,9 +159,10 @@ static void doodle_draw(float open) {
     (void)open;
     float X = UI_X;
     ui_background_grid(1);
-    ui_panel(X + 22, 18, 596, 400, 1);
+    ui_panel(X + 22, 18, UI_W - 44, 400, 1);
     Photo *p = photos_get(photo);
-    ui_ptitle(X + 22, 18, 596, "Doodle", p ? p->name : NULL, 1);
+    ui_ptitle(X + 22, 18, UI_W - 44, "Doodle", NULL, 1);
+    if (p) ui_text_fit_scroll(FONT_MENU, 15, 1.6f, X + UI_W - 260, 27, 222, 15, COL_SOFT, p->name);
     float cx, cy, cw, ch;
     canvas(&cx, &cy, &cw, &ch);
     gfx_rect(cx - 8, cy - 8, cw + 16, ch + 16, rgba(200, 208, 220, 153));
@@ -199,7 +200,7 @@ static void doodle_draw(float open) {
     gfx_line(bx, by + br + 3, bx, by + br + 8, 1.5f, rgba(255, 255, 255, 220));
 
     /* tools */
-    float tx = X + 470, ty = 62;
+    float tx = X + UI_W - 170, ty = 62;
     ui_text(FONT_MENU, 13, 1.5f, tx, ty, 20, COL_TITLE, "Color");
     for (int i = 0; i < 8; i++) {
         float sx = tx + (i % 4) * 32 + 12, sy = ty + 38 + (i / 4) * 32;
@@ -218,8 +219,8 @@ static void doodle_draw(float open) {
     ui_text(FONT_MENU, 12, 1.2f, tx, ty + 210, 20, COL_SOFT, "START  Save as new");
     if (npts >= MAX_POINTS - 50) ui_text(FONT_MENU, 12, 1.2f, tx, ty + 236, 20, rgba(0xff, 0x8c, 0xa0, 255), "Drawing is full");
 
-    ui_desc(X + 32, 366, 576, 42, 1);
-    ui_text(FONT_MENU, 13, 1.2f, X + 44, 366, 42, rgba(0xec, 0xeb, 0xff, 255),
+    ui_desc(X + 32, 366, UI_W - 64, 42, 1);
+    ui_text_fit_scroll(FONT_MENU, 13, 1.2f, X + 44, 366, UI_W - 88, 42, rgba(0xec, 0xeb, 0xff, 255),
             "Move with the stick, hold A to draw. The doodle is saved as a new photo.");
     const char *h[] = { "S:Move", "A:Draw", "X:Color", "Y:Brush", "ST:Save", "B:Back" };
     ui_hints(h, 6, 1, input_stick_dir());

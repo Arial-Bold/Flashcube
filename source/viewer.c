@@ -86,13 +86,15 @@ static void photo_size(float *w, float *h) {
 static void frame_rect(float *x, float *y, float *w, float *h) {
     float pw, ph;
     photo_size(&pw, &ph);
-    float mw = 344, mh = 336, cx = UI_X + 340, top = 22;
+    float mw = UI_W - 296, mh = 336, cx = UI_X + 150 + (UI_W - 268) / 2, top = 22;
     float s = fminf(mw / pw, mh / ph);
     float fw = pw * s, fh = ph * s;
     float fx = cx - fw / 2, fy = top + (mh - fh) / 2;
     /* full screen */
-    float S = fminf(gfx_width() / pw, 480 / ph);
-    float Fw = pw * S, Fh = ph * S, Fx = (gfx_width() - Fw) / 2, Fy = (480 - Fh) / 2;
+    float ax, ay, aw, ah;   /* full screen: the whole visible picture, margin or not */
+    gfx_full_area(&ax, &ay, &aw, &ah);
+    float S = fminf(aw / pw, ah / ph);
+    float Fw = pw * S, Fh = ph * S, Fx = ax + (aw - Fw) / 2, Fy = ay + (ah - Fh) / 2;
     float k = ease_inout(full_k);
     *x = lerpf(fx, Fx, k); *y = lerpf(fy, Fy, k); *w = lerpf(fw, Fw, k); *h = lerpf(fh, Fh, k);
 }
@@ -205,7 +207,11 @@ static void viewer_draw(float open) {
     float X = UI_X;
     ui_background_grid(1);
     float k = ease_inout(full_k), ua = 1 - k;
-    if (k > 0) gfx_rect(0, 0, gfx_width(), 480, rgba(0, 0, 0, (u8)(255 * k)));
+    if (k > 0) {
+        float ax, ay, aw, ah;
+        gfx_full_area(&ax, &ay, &aw, &ah);
+        gfx_rect(ax, ay, aw, ah, rgba(0, 0, 0, (u8)(255 * k)));
+    }
 
     /* the photo menu */
     if (ua > 0) {
@@ -236,16 +242,16 @@ static void viewer_draw(float open) {
 
     /* film strip */
     if (ua > 0) {
-        ui_panel(X + 538, 18, 82, 340, ua);
+        ui_panel(X + UI_W - 102, 18, 82, 340, ua);
         for (int k2 = -2; k2 <= 2; k2++) {
             int i = g_view_pos + k2;
             float y = 18 + 10 + (k2 + 2) * 63;
             if (i < 0 || i >= g_view_count) continue;
-            gfx_rect(X + 547 - 1.5f, y - 1.5f, 64 + 3, 54 + 3, rgba(190, 200, 215, (u8)(0.45f * 255 * ua)));
-            gfx_rect(X + 547, y, 64, 54, rgba(0x0b, 0x0f, 0x12, (u8)(255 * ua)));
-            app_draw_thumb(g_view[i], X + 549, y + 2, 60, 50, ua);
+            gfx_rect(X + UI_W - 93 - 1.5f, y - 1.5f, 64 + 3, 54 + 3, rgba(190, 200, 215, (u8)(0.45f * 255 * ua)));
+            gfx_rect(X + UI_W - 93, y, 64, 54, rgba(0x0b, 0x0f, 0x12, (u8)(255 * ua)));
+            app_draw_thumb(g_view[i], X + UI_W - 91, y + 2, 60, 50, ua);
             if (k2 == 0) {
-                gfx_rrect_outline(X + 547 - 3.5f, y - 3.5f, 64 + 7, 54 + 7, 2, 2.5f, rgba(0xe8, 0xcf, 0x4a, (u8)(255 * ua)));
+                gfx_rrect_outline(X + UI_W - 93 - 3.5f, y - 3.5f, 64 + 7, 54 + 7, 2, 2.5f, rgba(0xe8, 0xcf, 0x4a, (u8)(255 * ua)));
             }
         }
     }
@@ -253,41 +259,36 @@ static void viewer_draw(float open) {
     /* description */
     Photo *p = current();
     if (ua > 0 && p) {
-        ui_desc(X + 20, 376, 600, 34, ua);
+        ui_desc(X + 20, 376, UI_W - 40, 34, ua);
         char left[96], right[96], date[24];
-        char nm[40];
-        snprintf(nm, sizeof(nm), "%s", p->name);
-        if (zoom > 1.01f) snprintf(left, sizeof(left), "%s \x7f Zoom %d%%", nm, (int)(zoom * 100 + 0.5f));
-        else snprintf(left, sizeof(left), "%s", nm);
+        if (zoom > 1.01f) snprintf(left, sizeof(left), "%s \x7f Zoom %d%%", p->name, (int)(zoom * 100 + 0.5f));
+        else snprintf(left, sizeof(left), "%s", p->name);
         photos_format_date(p, date, sizeof(date));
-        float pw, ph;
-        photo_size(&pw, &ph);
         if (p->w) snprintf(right, sizeof(right), "%s \x7f %d \x80 %d \x7f %d of %d", date, p->w, p->h, g_view_pos + 1, g_view_count);
         else snprintf(right, sizeof(right), "%s \x7f %d of %d", date, g_view_pos + 1, g_view_count);
-        ui_text(FONT_MENU, 13, 1.2f, X + 32, 376, 34, rgba(0xec, 0xeb, 0xff, (u8)(255 * ua)), left);
-        ui_text_right(FONT_MENU, 13, 1.2f, X + 608, 376, 34, rgba(0xc9, 0xc6, 0xff, (u8)(255 * ua)), right);
+        ui_desc_texts(X + 20, 376, UI_W - 40, 34, left, right, ua);
     }
 
     /* information */
     if (info_on && p && ua > 0) {
-        float ix = X + 178, iy = 60, iw = 324, ih = 196;
+        float iw = 324, ih = 196, ix = X + 150 + (UI_W - 268) / 2 - iw / 2, iy = 60;
         ui_panel(ix, iy, iw, ih, ua);
         ui_ptitle(ix, iy, iw, "Information", NULL, ua);
-        char v[6][80], date[24];
+        char v[6][160], date[24];
         photos_format_date(p, date, sizeof(date));
         const Folder *f = photos_folder(p->folder);
-        snprintf(v[0], 80, "%s", p->name);
-        snprintf(v[1], 80, "%s", p->date[0] ? p->date : date);
-        snprintf(v[2], 80, "%s", req.state == 2 && req.pic.info.camera[0] ? req.pic.info.camera : "-");
-        if (p->w) snprintf(v[3], 80, "%d \x80 %d", p->w, p->h); else snprintf(v[3], 80, "-");
-        if (p->size >= 1048576) snprintf(v[4], 80, "%.1f MB", p->size / 1048576.0);
-        else snprintf(v[4], 80, "%u KB", (unsigned)((p->size + 1023) / 1024));
-        snprintf(v[5], 80, "%s", f ? f->name : "-");
+        snprintf(v[0], 160, "%s", p->name);   /* (long names scroll) */
+        snprintf(v[1], 160, "%s", p->date[0] ? p->date : date);
+        snprintf(v[2], 160, "%s", req.state == 2 && req.pic.info.camera[0] ? req.pic.info.camera : "-");
+        if (p->w) snprintf(v[3], 160, "%d \x80 %d", p->w, p->h); else snprintf(v[3], 160, "-");
+        if (p->size >= 1048576) snprintf(v[4], 160, "%.1f MB", p->size / 1048576.0);
+        else snprintf(v[4], 160, "%u KB", (unsigned)((p->size + 1023) / 1024));
+        snprintf(v[5], 160, "%s", f ? f->name : "-");
         static const char *lab[6] = { "Name", "Taken", "Camera", "Size", "File", "Folder" };
         for (int i = 0; i < 6; i++) {
             float y = iy + 40 + i * 25;
             ui_text(FONT_MENU, 13, 1.2f, ix + 16, y, 22, rgba(0x73, 0x92, 0xff, (u8)(255 * ua)), lab[i]);
-            ui_text(FONT_MENU, 13, 1, ix + 100, y, 22, rgba(0xee, 0xf1, 0xf6, (u8)(255 * ua)), v[i]);
+            ui_text_fit_scroll(FONT_MENU, 13, 1, ix + 100, y, iw - 116, 22, rgba(0xee, 0xf1, 0xf6, (u8)(255 * ua)), v[i]);
         }
     }
 
