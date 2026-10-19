@@ -27,6 +27,7 @@ typedef struct {
     int  sort_newest;      /* newest photos first */
     /* Updates */
     int  update_auto;      /* check GitHub for a new version at start-up */
+    int  snake_best;       /* a secret */
     /* Leaving */
     int  exit_action;      /* EXIT_LOAD_DOL or EXIT_RESTART */
     char swiss_dol[256];   /* the program Exit starts (sd:/boot.dol unless chosen) */

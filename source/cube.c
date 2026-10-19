@@ -567,7 +567,8 @@ void cube_draw(const CubeView *v) {
     float bx = lerpf(BASE_X, SIDE_X, v->turn), by = lerpf(BASE_Y, SIDE_Y, v->turn), bz = lerpf(BASE_Z, SIDE_Z, v->turn);
     M34 C = m34_mul(m34_scale(v->scale),
             m34_mul(m34_mul(m34_rx(sx), m34_mul(m34_ry(sy), m34_rz(sz))),
-            m34_mul(m34_mul(m34_rx(bx), m34_mul(m34_ry(by), m34_rz(bz))), side_turn(v->side, v->turn))));
+            m34_mul(m34_mul(m34_rx(bx), m34_mul(m34_ry(by), m34_rz(bz))),
+                    v->back > 0 ? m34_rx(-90 * (v->turn + v->back)) : side_turn(v->side, v->turn))));
     Item items[8];
     int n = 0;
     for (int f = 0; f < 6; f++) {
@@ -613,12 +614,23 @@ void cube_draw(const CubeView *v) {
                 label_vertical(&it->m, cx, cy, "Playtime", true, v->lit == SIDE_PLAYTIME, la);
                 label_vertical(&it->m, cx, cy, "Transfer", false, v->lit == SIDE_TRANSFER, la);
             }
+        } else if (f == 2 && v->back > 0) {
+            /* the back face: darker glass, and whatever the secret draws, turned
+             * the right way up (rolling over the top leaves it upside down) */
+            cube_glass(1, CUBE, 7, v->alpha * (1 - v->back), false);
+            cube_glass(2, CUBE, 7, v->alpha * v->back, false);
+            float ba = clamp01((v->back - 0.5f) / 0.5f) * v->alpha;
+            if (v->back_page && ba > 0) {
+                M34 up = m34_mul(it->m, m34_mul(m34_translate(CUBE, CUBE, 0), m34_rz(180)));
+                gfx_begin_3d(up.m, cx, cy, PERSP);
+                v->back_page(ba);
+            }
         } else if (f == sf && v->turn > 0) {
             /* the side being shown: its glass darkens a little and its page appears */
             cube_glass(1, CUBE, 7, v->alpha * (1 - v->turn), false);
             cube_glass(2, CUBE, 7, v->alpha * v->turn, false);
             gfx_begin_3d(it->m.m, cx, cy, PERSP);
-            float pa = clamp01((v->turn - 0.45f) / 0.55f) * v->alpha * (1 - v->collapse);
+            float pa = clamp01((v->turn - 0.45f) / 0.55f) * v->alpha * (1 - v->collapse) * (1 - clamp01(v->back * 2));
             page(&v->pages[v->side], pa);
         } else {
             cube_glass(1, CUBE, 7, v->alpha, false);

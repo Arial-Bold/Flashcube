@@ -13,10 +13,11 @@
 #include "update.h"
 #include "net.h"
 #include "m3d.h"
+#include "snake.h"
 #include <stdio.h>
 #include <string.h>
 
-enum { M_INTRO, M_NAV, M_TURN_IN, M_CHOSEN, M_TURN_OUT, M_OPENING, M_RETURN };
+enum { M_INTRO, M_NAV, M_TURN_IN, M_CHOSEN, M_TURN_OUT, M_OPENING, M_RETURN, M_BACK_IN, M_BACK, M_BACK_OUT };
 
 static int state;
 static float st;               /* seconds in this state */
@@ -30,6 +31,7 @@ static bool intro_skip, start_played;
 #define TURN_IN_S 0.95f
 #define TURN_OUT_S 0.8f
 #define OPEN_SWIRL_AT 0.55f
+#define BACK_S 1.0f
 
 static const ScreenId side_screen[SIDE_COUNT] = { SCR_ALBUM, SCR_SLIDESETUP, SCR_TRANSFER, SCR_PLAYTIME };
 
@@ -176,6 +178,13 @@ static void menu_update(void) {
         break;
     case M_CHOSEN: {
         int s = dir_to_side(input_dir());
+        /* the secret: hold Z and push up on the Album side, and the cube rolls on over */
+        if (side == SIDE_ALBUM && input_held(BTN_Z) && (input_stick_dir() == DIR_UP || input_held(BTN_UP))) {
+            sound_play(SFX_TURN_SIDE);
+            snake_reset();
+            set_state(M_BACK_IN);
+            break;
+        }
         if (input_pressed(BTN_A)) {
             sound_play(SFX_OPEN);
             const Screen *scr = app_screen_def(side_screen[side]);
@@ -209,6 +218,16 @@ static void menu_update(void) {
         }
         break;
     }
+    case M_BACK_IN:
+        if (st >= BACK_S) { set_state(M_BACK); sound_play(SFX_LOADED); }
+        break;
+    case M_BACK:
+        if (input_pressed(BTN_B)) { sound_play(SFX_TURN_CENTER); set_state(M_BACK_OUT); break; }
+        snake_update();
+        break;
+    case M_BACK_OUT:
+        if (st >= BACK_S * 0.85f) set_state(M_CHOSEN);
+        break;
     case M_RETURN:
         if (st >= 0.45f) set_state(M_CHOSEN);
         else if (input_pressed(BTN_B)) { sound_play(SFX_TURN_CENTER); set_state(M_TURN_OUT); queued_side = -1; }
@@ -225,6 +244,8 @@ static void menu_draw(float open) {
     cv.alpha = 1;
     cv.collapse = 0;
     cv.icon_time = icon_clock;
+    cv.back = 0;
+    if (state != M_BACK_IN && state != M_BACK && state != M_BACK_OUT) cv.sway = cv.sway < 1 ? fminf(1, cv.sway + g_dt) : 1;
     switch (state) {
     case M_INTRO:
         cv.turn = 0;
@@ -283,6 +304,19 @@ static void menu_draw(float open) {
         hints = 1 - clamp01(st / 0.3f);
         break;
     }
+    case M_BACK_IN:
+    case M_BACK:
+    case M_BACK_OUT: {
+        float k = state == M_BACK ? 1 : ease_bezier(clamp01(st / (state == M_BACK_IN ? BACK_S : BACK_S * 0.85f)), 0.55f, 0, 0.3f, 1);
+        if (state == M_BACK_OUT) k = 1 - k;
+        cv.turn = 1;
+        cv.back = k;
+        cv.labels = 0;
+        cv.icon = 1 - clamp01(k * 2);
+        cv.back_page = snake_draw;
+        cv.sway = 1 - 0.7f * k;   /* calmer while playing */
+        break;
+    }
     case M_RETURN: {
         float k = ease_bezier(clamp01(st / 0.45f), 0.2f, 0.6f, 0.3f, 1);
         cv.turn = 1;
@@ -323,6 +357,11 @@ static void menu_draw(float open) {
             gfx_rrect_outline(tx, ty, tw, 26, 13, 1.5f, rgba(0xe8, 0xcf, 0x4a, (u8)(220 * hints)));
             ui_text_center(FONT_MENU_BOLD, 13, 1.2f, tx + tw / 2, ty, 26, rgba(0xf6, 0xe0, 0x7a, (u8)(255 * hints)), tag);
         }
+    } else if (state == M_BACK || state == M_BACK_IN || state == M_BACK_OUT) {
+        const char *h[] = { "S:Steer", "B:Back", "A:Play" };
+        const char *hp[] = { "S:Steer", "B:Back" };
+        if (snake_playing()) ui_hints_center(hp, 2, UI_HINT_Y, 34, hints, input_stick_dir(), true);
+        else ui_hints_center(h, 3, UI_HINT_Y, 34, hints, input_stick_dir(), true);
     } else {
         const char *h[] = { "B:Cancel", "A:Confirm" };
         ui_hints_center(h, 2, UI_HINT_Y, 34, hints, -1, true);

@@ -28,6 +28,8 @@ typedef struct {
     float scale;          /* 1 = normal */
     float alpha;          /* whole cube */
     float sway;           /* 0..1 how much the idle sway applies */
+    float back;           /* 0..1: rolled on past Album to the back face (a secret) */
+    void (*back_page)(float alpha);   /* draws on the back face, in its 0..180 plane */
     CubePage pages[SIDE_COUNT];
 } CubeView;
 
