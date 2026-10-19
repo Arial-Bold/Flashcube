@@ -6,6 +6,7 @@
 #include "menumusic.h"
 #include <gccore.h>
 #include <aesndlib.h>
+#include <ogc/aram.h>
 #include <ogc/lwp_watchdog.h>
 #include <malloc.h>
 #include <math.h>
@@ -31,6 +32,15 @@ static void synth(int id) {
     sizes[id] = bytes;
 }
 
+/* Before each of a voice's copies to sound memory, wait for any copy still
+ * in progress: the sound library copies every voice through one shared
+ * buffer (this is what the music player's voices do too). */
+static void sfx_cb(AESNDPB *pb, u32 st) {
+    (void)pb;
+    if (st == VOICE_STATE_RUNNING)
+        for (int k = 0; k < 4000 && AR_GetDMAStatus(); k++) {}
+}
+
 /* A few voices of their own; each plays one sound once and stops itself. */
 #define SFX_VOICES 6
 static AESNDPB *sfx_voice[SFX_VOICES];
@@ -40,7 +50,7 @@ static int sfx_next;
 void sound_init(void) {
     AESND_Init();
     AESND_Pause(false);
-    for (int i = 0; i < SFX_VOICES; i++) sfx_voice[i] = AESND_AllocateVoice(NULL);
+    for (int i = 0; i < SFX_VOICES; i++) sfx_voice[i] = AESND_AllocateVoice(sfx_cb);
     for (int i = 0; i < SFX_COUNT; i++) synth(i);
     ready = true;
 }

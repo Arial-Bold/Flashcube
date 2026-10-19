@@ -1,12 +1,16 @@
 /* menumusic.c - see menumusic.h.
  *
- * The music is played from a ring buffer on one looping DSP voice. The voice
- * runs at 3/8 of the DSP's rate, so it moves exactly 36 frames through the
- * ring for every 2 ms audio block; the music player counts those blocks
- * (midi_audio_blocks), which says exactly where the voice is. A thread keeps
- * the ring filled about a quarter of a second ahead of it. The ring's size
- * is a whole number of the sound library's 1152-byte copy chunks, so the
- * voice never plays the padding the library adds after a short last chunk. */
+ * The music is streamed to one DSP voice in chunks, the way the music
+ * player streams its notes: a thread renders chunks into a queue ahead of
+ * time, and each time the sound library has finished copying the current
+ * chunk it asks (from the audio interrupt) for the next one. Nothing has to
+ * guess where the voice has got to, and if the thread ever falls behind the
+ * voice is given a chunk of silence, never old or half-written sound.
+ *
+ * The voice also waits, before each of its copies, for any copy to sound
+ * memory still in progress: the library copies every voice through one
+ * shared buffer, so two copies overlapping mix their data (heard as
+ * crackles and sudden loud bursts). The music player does the same. */
 #include "menumusic.h"
 #include "musicsynth.h"
 #include "midi.h"
@@ -19,7 +23,7 @@
 #ifdef GEKKO
 #include <gccore.h>
 #include <aesndlib.h>
-#include <ogc/lwp_watchdog.h>
+#include <ogc/aram.h>
 #endif
 
 static volatile float target;    /* wanted loudness (0..1), set by the main thread */
@@ -40,114 +44,89 @@ void menumusic_update(void) {
 
 #ifdef GEKKO
 
-#define CHUNK_FRAMES 288                   /* 1152 bytes of 16-bit stereo */
-#define RING_FRAMES (CHUNK_FRAMES * 64)    /* about one second */
-#define LEAD 6000                          /* frames written ahead of the voice */
-#define FRAMES_PER_BLOCK 36
+#define CHUNK_FRAMES 576                   /* 2304 bytes: two of the library's copies */
+#define CHUNK_BYTES (CHUNK_FRAMES * 4)
+#define NCHUNKS 40                         /* the queue: about 1.3 seconds */
 
-static int16_t ring[RING_FRAMES * 2] __attribute__((aligned(32)));
+static int16_t chunks[NCHUNKS][CHUNK_FRAMES * 2] __attribute__((aligned(32)));
+static int16_t quiet[CHUNK_FRAMES * 2] __attribute__((aligned(32)));
+static volatile uint32_t handed;   /* chunks given to the voice (written by the interrupt) */
+static volatile uint32_t filled;   /* chunks rendered (written by the thread) */
+static volatile bool voice_on;
 static AESNDPB *voice;
 static thr_t th;
 static bool th_ok;
 static volatile bool quit;
 
-/* Where the voice is, in frames since it started. The sound library copies
- * the voice's data to audio memory a chunk at a time and keeps its read
- * pointer (mram_curr) in the voice's block; that pointer is exactly how far
- * the voice has got (a chunk or two ahead of what is heard), so writing
- * past it is always safe. Counting 2 ms blocks instead drifts: when the DSP
- * is busy, the library skips a block without moving the voices on.
- * The block's layout is fixed by the DSP's mixer program; it's checked
- * against the ring's address before being trusted. */
-#define PB_MRAM_START 64
-#define PB_MRAM_CURR 68
-static uint32_t ring_addr;
-static bool pb_ok;
-static uint32_t last_off;
-static uint64_t pos_frames;
-static uint32_t blk0;
-
-static void pos_reset(void) {
-    ring_addr = (uint32_t)(uintptr_t)ring;
-    pb_ok = *(volatile uint32_t *)((uint8_t *)voice + PB_MRAM_START) == ring_addr;
-    last_off = 0;
-    pos_frames = 0;
-    blk0 = midi_audio_blocks();
-}
-
-static uint64_t voice_pos(void) {
-    if (pb_ok) {
-        uint32_t cur = *(volatile uint32_t *)((uint8_t *)voice + PB_MRAM_CURR);
-        if (cur >= ring_addr && cur <= ring_addr + sizeof(ring)) {
-            uint32_t off = (cur - ring_addr) / 4 % RING_FRAMES;
-            pos_frames += (off + RING_FRAMES - last_off) % RING_FRAMES;
-            last_off = off;
+/* Runs in the audio interrupt. */
+static void voice_cb(AESNDPB *pb, u32 st) {
+    if (st == VOICE_STATE_RUNNING) {
+        for (int k = 0; k < 4000 && AR_GetDMAStatus(); k++) {}   /* let another voice's copy finish */
+    } else if (st == VOICE_STATE_STREAM) {
+        if (filled > handed) {
+            AESND_SetVoiceBuffer(pb, chunks[handed % NCHUNKS], CHUNK_BYTES);
+            handed++;
+        } else {
+            AESND_SetVoiceBuffer(pb, quiet, CHUNK_BYTES);   /* the thread fell behind */
         }
-        return pos_frames;
     }
-    /* fallback: count the 2 ms blocks */
-    return (uint64_t)(midi_audio_blocks() - blk0) * FRAMES_PER_BLOCK;
 }
 
 static void *mm_thread(void *arg) {
     (void)arg;
-    bool playing = false;
     float level = 0;
-    uint64_t written = 0, quiet_until = 0;
     bool reset_done = false;
+    int quiet_chunks = 0;
     while (!quit) {
         float want = target;
-        if (!playing) {
+        if (!voice_on) {
             if (want <= 0) { thr_sleep_ms(30); continue; }
             if (!reset_done) { ms_reset(); reset_done = true; }
-            memset(ring, 0, sizeof(ring));
-            DCFlushRange(ring, sizeof(ring));
-            written = 600;
-            AESND_SetVoiceVolume(voice, 255, 255);
-            AESND_PlayVoice(voice, VOICE_STEREO16, ring, sizeof(ring), MS_RATE, 0, true);
-            pos_reset();
-            playing = true;
-            quiet_until = 0;
-        }
-        uint64_t pos = voice_pos();
-        if (written < pos + 300) written = pos + 300;   /* fell behind: skip ahead */
-        uint64_t goal = pos + LEAD;
-        while (written < goal) {
-            int at = (int)(written % RING_FRAMES);
-            int n = (int)(goal - written);
-            if (n > 256) n = 256;
-            if (n > RING_FRAMES - at) n = RING_FRAMES - at;
-            /* fade towards the wanted loudness: in over 2.5 s, out over 1 s */
-            float step = n / (float)MS_RATE / (want > level ? 2.5f : 1.0f);
-            if (level < want) { level += step * 0.5f; if (level > want) level = want; }
-            else if (level > want) { level -= step * 0.5f; if (level < want) level = want; }
-            if (level > 0) ms_render(&ring[at * 2], n, level);
-            else memset(&ring[at * 2], 0, (size_t)n * 4);
-            DCFlushRange(&ring[at * 2], (u32)n * 4);
-            written += (uint64_t)n;
-        }
-        /* silent for a while: let the voice go */
-        if (level <= 0 && want <= 0) {
-            if (!quiet_until) quiet_until = written + RING_FRAMES;
-            else if (pos > quiet_until) {
-                AESND_SetVoiceStop(voice, true);
-                playing = false;
-                continue;
+            handed = filled = 0;
+            /* a few chunks ready before it starts */
+            for (int i = 0; i < 6; i++) {
+                level += (want - level) * 0.02f;
+                ms_render(chunks[i], CHUNK_FRAMES, level);
+                filled++;
             }
-        } else {
-            quiet_until = 0;
+            AESND_SetVoiceVolume(voice, 255, 255);
+            AESND_PlayVoice(voice, VOICE_STEREO16, chunks[0], CHUNK_BYTES, MS_RATE, 0, true);
+            AESND_SetVoiceStream(voice, true);
+            handed = 1;
+            voice_on = true;
+            quiet_chunks = 0;
+        }
+        /* keep the queue full (one chunk always left for the voice to be copying) */
+        while (filled < handed + NCHUNKS - 2 && !quit) {
+            want = target;
+            /* fade towards the wanted loudness: in over about 2.5 s, out over 1 s */
+            float step = CHUNK_FRAMES / (float)MS_RATE / (want > level ? 2.5f : 1.0f) * 0.5f;
+            if (level < want) { level += step; if (level > want) level = want; }
+            else if (level > want) { level -= step; if (level < want) level = want; }
+            int16_t *c = chunks[filled % NCHUNKS];
+            if (level > 0) { ms_render(c, CHUNK_FRAMES, level); quiet_chunks = 0; }
+            else { memset(c, 0, CHUNK_BYTES); quiet_chunks++; }
+            filled++;
+        }
+        /* silent for a good while: let the voice go */
+        if (level <= 0 && want <= 0 && quiet_chunks > NCHUNKS * 2) {
+            AESND_SetVoiceStop(voice, true);
+            voice_on = false;
+            continue;
         }
         thr_sleep_ms(8);
     }
-    if (playing) AESND_SetVoiceStop(voice, true);
+    if (voice_on) AESND_SetVoiceStop(voice, true);
     return NULL;
 }
 
 void menumusic_init(void) {
-    voice = AESND_AllocateVoice(NULL);
+    voice = AESND_AllocateVoice(voice_cb);
     if (!voice) return;
+    memset(quiet, 0, sizeof(quiet));
+    DCFlushRange(quiet, sizeof(quiet));
     quit = false;
-    th_ok = thr_create(&th, mm_thread, NULL, 32 * 1024, 105);
+    th_ok = thr_create(&th, mm_thread, NULL, 32 * 1024, 115);
 }
 
 void menumusic_shutdown(void) {

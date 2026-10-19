@@ -298,16 +298,23 @@ static void draw_icon(int side, float a, float t, float collapse) {
 
 /* ------------------------------------------------------------- the cube */
 
-/* idle sway (degrees), the same keyframes as the design: 8 s */
+/* idle sway (degrees): the design's keyframes, every 2 s over 8 s, joined
+ * by a smooth looping curve (Catmull-Rom), so the cube never comes to a
+ * stop between them, it just keeps drifting gently */
 static void sway(float t, float *x, float *y, float *z) {
-    static const float K[5][3] = { { 0, 0, 0 }, { 5, 8, -2 }, { 2, 18, 2 }, { -2, 10, -1 }, { 0, 0, 0 } };
+    static const float K[4][3] = { { 0, 0, 0 }, { 5, 8, -2 }, { 2, 18, 2 }, { -2, 10, -1 } };
     float p = fmodf(t, 8.0f) / 2.0f;
     int i = (int)p;
     if (i > 3) i = 3;
-    float e = ease_inout(p - i);
-    *x = lerpf(K[i][0], K[i + 1][0], e);
-    *y = lerpf(K[i][1], K[i + 1][1], e);
-    *z = lerpf(K[i][2], K[i + 1][2], e);
+    float u = p - i, u2 = u * u, u3 = u2 * u;
+    const float *p0 = K[(i + 3) % 4], *p1 = K[i], *p2 = K[(i + 1) % 4], *p3 = K[(i + 2) % 4];
+    float o[3];
+    for (int k = 0; k < 3; k++)
+        o[k] = 0.5f * (2 * p1[k] + (-p0[k] + p2[k]) * u + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * u2 +
+                       (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * u3);
+    *x = o[0];
+    *y = o[1];
+    *z = o[2];
 }
 
 /* face transforms: front, right, back, left, top, bottom */
