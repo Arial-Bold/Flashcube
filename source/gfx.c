@@ -451,6 +451,12 @@ float gfx_snap_y(float y) {
 
 void gfx_rect(float x, float y, float w, float h, Color c) { gfx_rect_vgrad(x, y, w, h, c, c); }
 
+void gfx_fill_screen(Color c) {
+    float x, y, w, h;
+    gfx_full_area(&x, &y, &w, &h);
+    gfx_rect(x, y, w, h, c);
+}
+
 void gfx_rect_vgrad(float x, float y, float w, float h, Color top, Color bottom) {
     if (!(w > 0) || !(h > 0) || !isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h)) return;
     float ux, uy;

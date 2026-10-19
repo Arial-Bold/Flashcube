@@ -374,7 +374,7 @@ void ui_hints_center(const char *const *hints, int n, float y, float gap, float 
 void ui_message(const char *title, const char *text, float al) {
     if (al <= 0) return;
     float w = 420, h = 150, x = UI_X + UI_W / 2 - w / 2, y = 240 - h / 2 - 20;
-    gfx_rect(0, 0, gfx_width(), 480, rgba(0, 0, 0, (u8)(0.45f * 255 * al)));
+    gfx_fill_screen(rgba(0, 0, 0, (u8)(0.45f * 255 * al)));
     ui_panel(x, y, w, h, al);
     ui_ptitle(x, y, w, title, NULL, al);
     /* wrap the text */

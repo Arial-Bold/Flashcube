@@ -251,7 +251,7 @@ void app_frame(void) {
     ui_text_scroll_tick();
     screens[cur]->draw(opened);
     app_draw_toast();
-    if (fade > 0) gfx_rect(0, 0, gfx_width(), 480, rgba(0, 0, 0, (u8)(255 * clamp01(fade))));
+    if (fade > 0) gfx_fill_screen(rgba(0, 0, 0, (u8)(255 * clamp01(fade))));
     gfx_end_frame();
 }
 

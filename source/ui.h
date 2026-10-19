@@ -49,7 +49,7 @@ void ui_gold_ring(float x, float y, float w, float h, float pulse, float alpha);
  * "A:Confirm", "DP:Next" (D-pad), "Z:..." etc. The stick icon's knob moves in
  * the direction given (DIR_* or -1, from input). */
 void ui_hints(const char *const *hints, int n, float alpha, int stick_dir);
-#define UI_HINT_Y (480 - 34 - 13)   /* the centre line of the hints */
+#define UI_HINT_Y (480 - 30)   /* the centre line of the hints, clear of the panels */
 /* The same, centred as a group (cube screens). */
 void ui_hints_center(const char *const *hints, int n, float y, float gap, float alpha, int stick_dir, bool big);
 float ui_hint_width(const char *hint, bool big);

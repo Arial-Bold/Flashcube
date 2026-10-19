@@ -373,7 +373,7 @@ static void draw_cube_turn(PicRequest *from, PicRequest *to, float k) {
 
 static void show_draw(float open) {
     (void)open;
-    gfx_rect(0, 0, gfx_width(), 480, rgba(0, 0, 0, 255));
+    gfx_fill_screen(rgba(0, 0, 0, 255));
     PicRequest *cur = &bufs[cur_buf], *nxt = &bufs[cur_buf ^ 1];
     bool cover = g_set.ss_transition == SS_PANZOOM;
     float life = shown_t + TRANS_S;
@@ -397,7 +397,11 @@ static void show_draw(float open) {
     /* the hints appear for a moment after starting or a button */
     float ha = paused ? 1 : clamp01((3.0f - hint_t) / 0.5f);
     if (ha > 0) {
-        gfx_rect_vgrad(0, 400, gfx_width(), 80, rgba(0, 0, 0, 0), rgba(0, 0, 0, (u8)(170 * ha)));
+        {   /* shade under the hints, out to the very edges of the TV picture */
+            float fx, fy, fw, fh;
+            gfx_full_area(&fx, &fy, &fw, &fh);
+            gfx_rect_vgrad(fx, 392, fw, fy + fh - 392, rgba(0, 0, 0, 0), rgba(0, 0, 0, (u8)(170 * ha)));
+        }
         const char *h[] = { "X:\x83 Music", "DP:Next", "B:Stop", paused ? "A:Play" : "A:Pause" };
         ui_hints(h, 4, music_panel_active() ? 0 : ha, -1);
         if (paused) ui_text(FONT_MENU, 14, 1.2f, UI_X + 24, 24, 24, rgba(255, 255, 255, 220), "Paused");
