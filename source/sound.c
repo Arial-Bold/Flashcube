@@ -3,6 +3,7 @@
  * player uses too. From CubeBrowser. */
 #include "sound.h"
 #include "settings.h"
+#include "menumusic.h"
 #include <gccore.h>
 #include <aesndlib.h>
 #include <ogc/lwp_watchdog.h>
@@ -47,6 +48,7 @@ void sound_init(void) {
 void sound_shutdown(void) {
     if (!ready) return;
     ready = false;
+    menumusic_shutdown();
     AESND_Pause(true);
     AESND_Reset();
 }

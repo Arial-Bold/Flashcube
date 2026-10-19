@@ -33,6 +33,11 @@ void  gfx_set_margin(float m);
 /* The whole visible screen in design units (bigger than 0..width, 0..480
  * when there is a margin): for backgrounds and full-screen pictures. */
 void  gfx_full_area(float *x, float *y, float *w, float *h);
+/* One screen pixel in drawing units, and coordinates moved onto pixel edges. */
+float gfx_pixel_w(void);
+float gfx_pixel_h(void);
+float gfx_snap_x(float x);
+float gfx_snap_y(float y);
 const char *gfx_mode_name(void);
 
 void gfx_begin_frame(void);

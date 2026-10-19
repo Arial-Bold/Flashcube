@@ -5,6 +5,7 @@
  * sample (instruments.h), pitched, enveloped and panned. */
 #pragma once
 #include <stdbool.h>
+#include <stdint.h>
 
 #define MIDI_DIR "sd:/midi"
 
@@ -38,6 +39,7 @@ int   midi_voices_in_use(void);
 const char *midi_instruments(void);   /* "Built-in" or the SoundFont's name */
 const char *midi_message(void);   /* a problem to show, or "" */
 float midi_dsp_load(void);         /* % of the sound processor's time in use */
+uint32_t midi_audio_blocks(void);  /* 2 ms output blocks played so far (0 if the DSP isn't running) */
 
 /* The Instruments setting changed: load the new SoundFont (in the background). */
 void midi_instruments_changed(void);

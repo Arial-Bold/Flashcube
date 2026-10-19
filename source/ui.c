@@ -170,9 +170,37 @@ void ui_ptitle(float px, float py, float pw, const char *left, const char *right
     gfx_rect(px + 10, py + 31, pw - 20, 1, rgba(200, 210, 230, (u8)(0.28f * 255 * al)));
 }
 
+/* A fine square grid over part of a bar, like the system menu's buttons:
+ * strongest at one end (side > 0: the right end), fading out across `span`
+ * of the width. Lines sit on whole screen pixels so every one looks alike. */
+static void grid_patch(float x, float y, float w, float h, float cell, float span, int side, Color c) {
+    float lw = gfx_pixel_w(), lh = gfx_pixel_h();
+    float sw = w * span;
+    float x0 = side > 0 ? x + w - sw : x, x1 = x0 + sw;
+    Color clear = c;
+    clear.a = 0;
+    /* horizontal lines: one gradient each */
+    for (float gy = y + cell * 0.5f; gy < y + h - 1; gy += cell) {
+        float yy = gfx_snap_y(gy);
+        if (side > 0) gfx_rect_hgrad(x0, yy, sw, lh, clear, c);
+        else gfx_rect_hgrad(x0, yy, sw, lh, c, clear);
+    }
+    /* vertical lines, fading with distance from the strong end */
+    float start = side > 0 ? x + w - cell * 0.5f : x + cell * 0.5f;
+    for (int i = 0;; i++) {
+        float gx = start - side * cell * i;
+        if (gx < x0 || gx > x1) break;
+        float k = 1 - (side > 0 ? (x1 - gx) : (gx - x0)) / sw;
+        Color lc = c;
+        lc.a = (u8)(c.a * k * k);
+        if (lc.a) gfx_rect(gfx_snap_x(gx), y + 1, lw, h - 2, lc);
+    }
+}
+
 void ui_row(float x, float y, float w, float h, bool on, float al) {
     if (!on || al <= 0) return;
     gfx_rrect_vgrad(x, y, w, h, 3, rgba(140, 160, 180, (u8)(0.34f * 255 * al)), rgba(70, 90, 110, (u8)(0.22f * 255 * al)));
+    grid_patch(x + 1, y + 1, w - 2, h - 2, 7, 0.45f, -1, rgba(200, 235, 245, (u8)(0.20f * 255 * al)));
     gfx_rrect_outline(x, y, w, h, 3, 1, rgba(215, 225, 240, (u8)(0.6f * 255 * al)));
 }
 
@@ -198,12 +226,9 @@ void ui_button(float x, float y, float w, float h, const char *label, bool on, f
         gfx_rect_vgrad(x, y + h * 0.5f, w, h * 0.5f - 2, rgba(170, 180, 195, (u8)(0.22f * A)), rgba(120, 130, 145, (u8)(0.30f * A)));
         gfx_rrect(x, y + h - 3, w, 3, 2, rgba(120, 130, 145, (u8)(0.30f * A)));
     }
-    /* the fine stripes at the right end, fading out to the left */
-    float sw = w * 0.34f;
-    for (float sx = x + w - 3; sx > x + w - sw; sx -= 3) {
-        float fade = clamp01((sx - (x + w - sw)) / (sw * 0.6f));
-        gfx_rect(sx, y + 2, 1, h - 4, rgba(255, 255, 255, (u8)(0.22f * A * fade)));
-    }
+    /* the fine grid at the right end, fading out to the left */
+    grid_patch(x + 1, y + 1, w - 2, h - 2, 6, 0.42f, 1,
+               on ? rgba(255, 252, 215, (u8)(0.42f * A)) : rgba(255, 255, 255, (u8)(0.30f * A)));
     gfx_rrect_outline(x, y, w, h, 3, 1, on ? rgba(255, 250, 200, (u8)(0.8f * A)) : rgba(235, 240, 250, (u8)(0.55f * A)));
     gfx_rect(x + 2, y + 1, w - 4, 1, on ? rgba(255, 255, 230, (u8)(0.8f * A)) : rgba(255, 255, 255, (u8)(0.5f * A)));
     Color tc = on ? rgba(0x1a, 0x16, 0x08, A) : rgba(0xf2, 0xf4, 0xf8, A);
@@ -215,6 +240,7 @@ void ui_desc(float x, float y, float w, float h, float al) {
     if (al <= 0) return;
     gfx_rrect_outline(x - 1, y - 1, w + 2, h + 2, 4, 1, rgba(11, 11, 32, (u8)(255 * al)));
     gfx_rrect_vgrad(x, y, w, h, 3, rgba(0x2a, 0x22, 0x8c, (u8)(255 * al)), rgba(0x3b, 0x2c, 0xb6, (u8)(255 * al)));
+    grid_patch(x + 1, y + 1, w - 2, h - 2, 7, 0.30f, 1, rgba(190, 190, 255, (u8)(0.16f * 255 * al)));
     gfx_rrect_outline(x, y, w, h, 3, 1, rgba(175, 175, 255, (u8)(0.6f * 255 * al)));
 }
 
@@ -316,16 +342,22 @@ static float hint_draw(const char *hint, float x, float cy, float al, int stick_
 
 float ui_hint_width(const char *hint, bool big) { return hint_draw(hint, 0, 0, 1, -1, big, false); }
 
+/* The controller hints along the bottom: centred, in the same place and
+ * style as on the cube screen. A long row closes up, then uses smaller type. */
 void ui_hints(const char *const *hints, int n, float al, int stick_dir) {
     if (al <= 0 || n <= 0) return;
-    /* spread between the margins, like the system menu */
-    float left = UI_X + 24, right = UI_X + UI_W - 24, cy = 480 - 22 - 12;
-    float total = 0;
-    for (int i = 0; i < n; i++) total += ui_hint_width(hints[i], false);
-    float gap = n > 1 ? (right - left - total) / (n - 1) : 0;
-    if (gap > 60 || n == 1) { gap = 40; left = right - total - gap * (n - 1); }   /* few hints: to the right */
-    float x = left;
-    for (int i = 0; i < n; i++) x += hint_draw(hints[i], x, cy, al, stick_dir, false, true) + gap;
+    float room = gfx_width() - 40;
+    for (int big = 1; big >= 0; big--) {
+        float total = 0;
+        for (int i = 0; i < n; i++) total += ui_hint_width(hints[i], big != 0);
+        float gap = 36;
+        if (n > 1 && total + gap * (n - 1) > room) gap = (room - total) / (n - 1);
+        if (gap >= 16 || !big) {
+            if (gap < 10) gap = 10;
+            ui_hints_center(hints, n, UI_HINT_Y, gap, al, stick_dir, big != 0);
+            return;
+        }
+    }
 }
 
 void ui_hints_center(const char *const *hints, int n, float y, float gap, float al, int stick_dir, bool big) {

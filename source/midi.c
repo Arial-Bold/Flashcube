@@ -410,6 +410,7 @@ static void hw_silence(int i) {
 }
 
 float midi_dsp_load(void) { return AESND_GetDSPProcessUsage(); }
+uint32_t midi_audio_blocks(void) { return hw_ok ? frame_no : 0; }
 
 #else   /* ------------------------------------------- PC software mixer */
 
@@ -432,6 +433,7 @@ static void hw_start(int i, const Zone *z, uint32_t freq, uint16_t vl, uint16_t 
 static void hw_set(int i, uint32_t freq, uint16_t vl, uint16_t vr) { sw[i].freq = freq; sw[i].vl = vl / 256.0f; sw[i].vr = vr / 256.0f; }
 static void hw_silence(int i) { sw[i].on = false; }
 float midi_dsp_load(void) { return 0; }
+uint32_t midi_audio_blocks(void) { return 0; }
 
 #endif
 

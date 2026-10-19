@@ -314,8 +314,8 @@ void gfx_set_clip(float x, float y, float w, float h) {
     float x1 = (x + w) * t_a + t_tx, y1 = (y + h) * t_d + t_ty;
     float mx = vw * margin, my = 480.0f * margin;
     float kx = rmode->fbWidth / (vw + 2 * mx), ky = rmode->efbHeight / (480.0f + 2 * my);
-    int px = (int)((x0 + mx) * kx), py = (int)((y0 + my) * ky);
-    int pw = (int)((x1 + mx) * kx) - px, ph = (int)((y1 + my) * ky) - py;
+    int px = (int)floorf((x0 + mx) * kx), py = (int)floorf((y0 + my) * ky);
+    int pw = (int)ceilf((x1 + mx) * kx) - px, ph = (int)ceilf((y1 + my) * ky) - py;
     if (px < 0) { pw += px; px = 0; }
     if (py < 0) { ph += py; py = 0; }
     if (px > rmode->fbWidth - 1) px = rmode->fbWidth - 1;
@@ -418,10 +418,45 @@ static void guard_bounds(float *x0, float *y0, float *x1, float *y1) {
     *y1 = (480.0f + GUARD + my - t_ty) / sy;
 }
 
+/* The size of one screen pixel in drawing units. Lines thinner than a
+ * pixel can fall between the GPU's pixel centres and vanish (the drawing
+ * space is scaled to the TV by a little under or over 1), so thin lines are
+ * widened to a whole pixel. */
+static void pixel_units(float *ux, float *uy) {
+    *ux = *uy = 0;
+    if (p3d || t_rotated) return;
+    float mx = vw * margin, my = 480.0f * margin;
+    float kx = rmode->fbWidth / (vw + 2 * mx) * fabsf(t_a), ky = rmode->efbHeight / (480.0f + 2 * my) * fabsf(t_d);
+    if (kx > 1e-4f) *ux = 1.0f / kx;
+    if (ky > 1e-4f) *uy = 1.0f / ky;
+}
+
+float gfx_pixel_w(void) { float ux, uy; pixel_units(&ux, &uy); return ux > 0 ? ux : 1; }
+float gfx_pixel_h(void) { float ux, uy; pixel_units(&ux, &uy); return uy > 0 ? uy : 1; }
+
+/* Moves a coordinate onto the nearest screen pixel edge (for fine grids,
+ * so every line is drawn the same). */
+float gfx_snap_x(float x) {
+    if (p3d || t_rotated || fabsf(t_a) < 1e-4f) return x;
+    float mx = vw * margin, k = rmode->fbWidth / (vw + 2 * mx);
+    float d = floorf((x * t_a + t_tx + mx) * k + 0.5f);
+    return (d / k - mx - t_tx) / t_a;
+}
+float gfx_snap_y(float y) {
+    if (p3d || t_rotated || fabsf(t_d) < 1e-4f) return y;
+    float my = 480.0f * margin, k = rmode->efbHeight / (480.0f + 2 * my);
+    float d = floorf((y * t_d + t_ty + my) * k + 0.5f);
+    return (d / k - my - t_ty) / t_d;
+}
+
 void gfx_rect(float x, float y, float w, float h, Color c) { gfx_rect_vgrad(x, y, w, h, c, c); }
 
 void gfx_rect_vgrad(float x, float y, float w, float h, Color top, Color bottom) {
     if (!(w > 0) || !(h > 0) || !isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h)) return;
+    float ux, uy;
+    pixel_units(&ux, &uy);
+    if (w < ux) { x -= (ux - w) * 0.5f; w = ux; }
+    if (h < uy) { y -= (uy - h) * 0.5f; h = uy; }
     float gx0, gy0, gx1, gy1;
     guard_bounds(&gx0, &gy0, &gx1, &gy1);
     if (x >= gx1 || y >= gy1 || x + w <= gx0 || y + h <= gy0) return;
@@ -523,9 +558,14 @@ void gfx_rrect(float x, float y, float w, float h, float r, Color c) { gfx_rrect
 void gfx_rrect_outline(float x, float y, float w, float h, float r, float t, Color c) {
     if (!(w > 0) || !(h > 0) || !isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h) || !isfinite(t)) return;
     if (!guard_rrect(&x, &y, &w, &h, r + t, NULL, NULL)) return;
+    float ux, uy;
+    pixel_units(&ux, &uy);
+    float tx = t < ux ? ux : t, ty = t < uy ? uy : t;   /* never thinner than a pixel */
+    if (2 * tx >= w || 2 * ty >= h) { gfx_rrect(x, y, w, h, r, c); return; }
     float ox[RR_PTS], oy[RR_PTS], ix[RR_PTS], iy[RR_PTS];
     int n = rr_points(x, y, w, h, r, ox, oy);
-    rr_points(x + t, y + t, w - 2 * t, h - 2 * t, r - t, ix, iy);
+    float ri = r - (tx > ty ? tx : ty);
+    rr_points(x + tx, y + ty, w - 2 * tx, h - 2 * ty, ri > 0 ? ri : 0, ix, iy);
     mode_color();
     BEGIN(GX_TRIANGLESTRIP, (n + 1) * 2);
     for (int i = 0; i <= n; i++) {
@@ -558,6 +598,10 @@ void gfx_circle(float cx, float cy, float r, Color c) {
 
 void gfx_ring(float cx, float cy, float r, float t, float a0, float a1, Color c) {
     if (!sane(cx) || !sane(cy) || !sane(r) || !sane(t) || !sane(a0) || !sane(a1)) return;
+    float ux, uy;
+    pixel_units(&ux, &uy);
+    if (t < ux) t = ux;
+    if (t < uy) t = uy;
     const int N = 24;
     mode_color();
     BEGIN(GX_TRIANGLESTRIP, (N + 1) * 2);

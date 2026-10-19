@@ -10,6 +10,7 @@
 #include "photos.h"
 #include "sound.h"
 #include "midi.h"
+#include "menumusic.h"
 #include "applog.h"
 #include "net.h"
 #include "dolload.h"
@@ -116,24 +117,47 @@ void app_prefetch_view(int pos, int ahead) {
 
 /* Leaves Flashcube for Swiss, as CubeBrowser does: the Swiss .dol from the
  * settings, or the first swiss*.dol found on the card (remembered). */
-bool app_exit_to_swiss(void) {
+/* What Exit does, for buttons and hints: "Exit to Swiss", "Restart"... */
+const char *app_exit_label(void) {
+    static char buf[64];
+    if (g_set.exit_action == EXIT_RESTART) return "Restart";
+    const char *name = strrchr(g_set.swiss_dol, '/');
+    name = name ? name + 1 : g_set.swiss_dol;
+    if (!strncasecmp(name, "swiss", 5) || !strcasecmp(name, "boot.dol") || !strcasecmp(name, "ipl.dol") || !name[0])
+        return "Exit to Swiss";
+    snprintf(buf, sizeof(buf), "Exit to %.40s", name);
+    char *dot = strrchr(buf, '.');
+    if (dot && !strcasecmp(dot, ".dol")) *dot = 0;
+    return buf;
+}
+
+/* Leaves Flashcube the way Settings > Exit says: starts the chosen .dol
+ * (boot.dol unless another was picked) or restarts the console. If the .dol
+ * isn't there, boot.dol and then a Swiss .dol on the card are tried. */
+bool app_exit(void) {
     char err[256];
     settings_save();
+    if (g_set.exit_action == EXIT_RESTART) {
+        sound_shutdown();
+        system_restart();
+        return false;
+    }
     if (!dol_check(g_set.swiss_dol, err, sizeof(err))) {
+        const char *pick = NULL;
         static char found[48][256];
-        int n = storage_ok() ? dol_find("sd:/", found, 48) : 0;
-        int pick = -1;
-        for (int i = 0; i < n && pick < 0; i++) {
+        if (dol_check("sd:/boot.dol", err, sizeof(err))) pick = "sd:/boot.dol";
+        int n = !pick && storage_ok() ? dol_find("sd:/", found, 48) : 0;
+        for (int i = 0; i < n && !pick; i++) {
             const char *name = strrchr(found[i], '/');
             name = name ? name + 1 : found[i];
-            if (!strncasecmp(name, "swiss", 5) && dol_check(found[i], err, sizeof(err))) pick = i;
+            if (!strncasecmp(name, "swiss", 5) && dol_check(found[i], err, sizeof(err))) pick = found[i];
         }
-        if (pick < 0) {
-            app_toast("Swiss wasn't found on the SD card.");
+        if (!pick) {
+            app_toast("No program to start was found. Choose one in Settings.");
             sound_play(SFX_ERROR);
             return false;
         }
-        snprintf(g_set.swiss_dol, sizeof(g_set.swiss_dol), "%s", found[pick]);
+        snprintf(g_set.swiss_dol, sizeof(g_set.swiss_dol), "%s", pick);
         settings_save();
     }
     if (!dol_launch(g_set.swiss_dol, err, sizeof(err))) {
@@ -177,6 +201,7 @@ void app_init(void) {
     input_init();
     sound_init();          /* also starts audio memory (ARAM) */
     midi_init();
+    menumusic_init();
     photos_init();
     photos_on_insert = photo_inserted;
     if (!sd) app_log("no SD card");
@@ -205,6 +230,7 @@ void app_frame(void) {
     input_update();
     photos_tick();
     net_tick();
+    menumusic_update();
 
     if (fading == 1) {
         fade += g_dt / 0.14f;

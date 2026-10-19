@@ -16,12 +16,12 @@ static const Key keys[] = {
     S("net.dns", dns), I("net.port", http_port, 1, 65535),
     I("display.video", video_mode, 0, 2), I("display.widescreen", widescreen, 0, 1),
     I("display.full_width", full_width, 0, 1), I("display.margin", margin, 0, 12), I("display.intro", intro, 0, 1),
-    I("sound.menu", sounds, 0, 1), I("sound.volume", volume, 0, 10),
+    I("sound.menu", sounds, 0, 1), I("sound.volume", volume, 0, 10), I("sound.menu_music", menu_music, 0, 1),
     S("music.soundfont", music_sf2), I("music.volume", music_volume, 0, 10),
     I("music.shuffle", music_shuffle, 0, 1), I("music.repeat", music_repeat, 0, 1),
     I("slideshow.transition", ss_transition, 0, 2), I("slideshow.seconds", ss_seconds, 3, 20),
     I("slideshow.shuffle", ss_shuffle, 0, 1), I("slideshow.music", ss_music, 0, 1),
-    I("album.newest_first", sort_newest, 0, 1), S("exit.dol", swiss_dol),
+    I("album.newest_first", sort_newest, 0, 1), I("exit.action", exit_action, 0, 1), S("exit.dol", swiss_dol),
 };
 #define NKEYS (int)(sizeof(keys) / sizeof(keys[0]))
 
@@ -37,6 +37,7 @@ void settings_defaults(Settings *s) {
     s->intro = 1;
     s->sounds = 1;
     s->volume = 7;
+    s->menu_music = 1;
     s->music_volume = 7;
     s->music_repeat = 1;
     s->ss_transition = SS_PANZOOM;
@@ -44,7 +45,7 @@ void settings_defaults(Settings *s) {
     s->ss_shuffle = 0;
     s->ss_music = 1;
     s->sort_newest = 1;
-    snprintf(s->swiss_dol, sizeof(s->swiss_dol), "sd:/ipl.dol");
+    snprintf(s->swiss_dol, sizeof(s->swiss_dol), "sd:/boot.dol");
 }
 
 static void trim(char *s) {
@@ -59,6 +60,7 @@ bool settings_load(void) {
     char *text = storage_read(path, NULL);
     if (!text) return false;
     char *line = text;
+    bool has_action = strstr(text, "exit.action=") != NULL;
     while (line && *line) {
         char *next = strchr(line, '\n');
         if (next) *next++ = 0;
@@ -85,6 +87,9 @@ bool settings_load(void) {
         line = next;
     }
     free(text);
+    /* files from before the Exit choice: their default was ipl.dol */
+    if (!has_action && !strcmp(g_set.swiss_dol, "sd:/ipl.dol"))
+        snprintf(g_set.swiss_dol, sizeof(g_set.swiss_dol), "sd:/boot.dol");
     return true;
 }
 

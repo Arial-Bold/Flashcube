@@ -9,6 +9,7 @@
 #include "photos.h"
 #include "settings.h"
 #include "sound.h"
+#include "menumusic.h"
 #include "net.h"
 #include "m3d.h"
 #include <stdio.h>
@@ -129,7 +130,10 @@ static void menu_update(void) {
         intro_t += g_dt;
         if (input_pressed(BTN_A | BTN_START | BTN_B)) intro_t = logo_duration();
         if (!start_played && intro_t >= (intro_skip ? 0.1f : 5.4f)) { start_played = true; sound_play(SFX_START); }
-        if (intro_t >= (intro_skip ? 1.0f : logo_duration())) set_state(M_NAV);
+        if (intro_t >= (intro_skip ? 1.0f : logo_duration())) {
+            set_state(M_NAV);
+            menumusic_start(intro_skip ? 1.0f : 2.0f);   /* after the opening sound */
+        }
         break;
     case M_NAV: {
         int s = dir_to_side(input_stick_dir());
@@ -137,9 +141,17 @@ static void menu_update(void) {
         if (s >= 0) start_turn(s);
         else if (input_pressed(BTN_START)) { sound_play(SFX_SELECT); settings_panel_open(); }
         else if (input_pressed(BTN_B)) {
-            /* B twice: back to Swiss */
-            if (g_time < exit_armed_until) { exit_armed_until = 0; app_exit_to_swiss(); }
-            else { exit_armed_until = g_time + 3; sound_play(SFX_BACK); app_toast("Press B again to exit to Swiss"); }
+            /* B twice: back to Swiss (or whatever Exit is set to do) */
+            if (g_time < exit_armed_until) { exit_armed_until = 0; app_exit(); }
+            else {
+                exit_armed_until = g_time + 3;
+                sound_play(SFX_BACK);
+                char msg[96];
+                const char *l = app_exit_label();
+                if (g_set.exit_action == EXIT_RESTART) snprintf(msg, sizeof(msg), "Press B again to restart the console");
+                else snprintf(msg, sizeof(msg), "Press B again to %c%s", l[0] | 0x20, l + 1);
+                app_toast(msg);
+            }
         }
         break;
     }
@@ -277,11 +289,13 @@ static void menu_draw(float open) {
             d = c < 0.2f ? -1 : c < 0.9f ? DIR_UP : c < 1.2f ? -1 : c < 1.9f ? DIR_RIGHT : c < 2.2f ? -1 : c < 2.9f ? DIR_DOWN
                 : c < 3.2f ? -1 : c < 3.9f ? DIR_LEFT : -1;
         }
-        const char *h[] = { "S:Menu Selection", "ST:Settings", "B:Exit to Swiss" };
-        ui_hints_center(h, state == M_NAV ? 3 : 1, 480 - 34 - 13, 36, hints, d, true);
+        char exit_hint[72];
+        snprintf(exit_hint, sizeof(exit_hint), "B:%s", app_exit_label());
+        const char *h[] = { "S:Menu Selection", "ST:Settings", exit_hint };
+        ui_hints_center(h, state == M_NAV ? 3 : 1, UI_HINT_Y, 36, hints, d, true);
     } else {
         const char *h[] = { "B:Cancel", "A:Confirm" };
-        ui_hints_center(h, 2, 480 - 34 - 13, 34, hints, -1, true);
+        ui_hints_center(h, 2, UI_HINT_Y, 34, hints, -1, true);
     }
 
     /* the section swirling in */

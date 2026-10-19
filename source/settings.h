@@ -15,6 +15,7 @@ typedef struct {
     int  intro;            /* play the opening animation */
     /* Sound */
     int  sounds, volume;
+    int  menu_music;       /* Flashcube's own background music in the menus */
     char music_sf2[256];   /* "" = first .sf2 in sd:/midi, "builtin", or a file */
     int  music_volume, music_shuffle, music_repeat;
     /* Slideshow */
@@ -25,10 +26,12 @@ typedef struct {
     /* Album */
     int  sort_newest;      /* newest photos first */
     /* Leaving */
-    char swiss_dol[256];   /* Swiss, started by "Exit to Swiss" (found on the card if moved) */
+    int  exit_action;      /* EXIT_LOAD_DOL or EXIT_RESTART */
+    char swiss_dol[256];   /* the program Exit starts (sd:/boot.dol unless chosen) */
 } Settings;
 
 enum { SS_FADE, SS_PANZOOM, SS_CUBE };
+enum { EXIT_LOAD_DOL, EXIT_RESTART };
 
 extern Settings g_set;
 

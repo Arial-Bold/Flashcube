@@ -55,9 +55,21 @@ static const Tone center[] = { T(350, 350, .05f, .38f, 1.3f, .5f, 1), T(437, 437
 /* opening a side: a bright shimmer that settles lower */
 static const Tone openm[] = { T(668, 640, 0, .15f, .9f, .45f, 1), T(750, 720, .02f, .16f, .9f, .4f, 1), T(556, 540, .1f, .2f, 1.0f, .4f, 1),
                               T(445, 440, .35f, .15f, .8f, .35f, 1) };
-/* start: a climbing sweep of tones */
-static const Tone start[] = { T(130, 170, 0, .05f, .3f, .5f, 1), T(342, 342, .1f, .05f, .5f, .35f, 1), T(490, 490, .25f, .08f, .6f, .4f, 1),
-                              T(694, 694, .45f, .1f, .6f, .4f, 1), T(880, 880, .62f, .12f, .6f, .35f, 2), T(1320, 1320, .7f, .1f, .4f, .06f, 0) };
+/* start: a bright, bouncy flourish - a D chord, a run of little bells
+ * skipping upwards, a quick lift to G and a big shimmering D to finish */
+static const Tone start[] = {
+    T(146.8f, 146.8f, 0, .02f, 1.0f, .40f, 1), T(293.7f, 293.7f, 0, .01f, 1.0f, .42f, 1), T(370.0f, 370.0f, 0, .01f, .9f, .36f, 1),
+    T(440.0f, 440.0f, 0, .01f, .9f, .36f, 1), T(659.3f, 659.3f, 0, .005f, .7f, .26f, 2),
+    T(880.0f, 880.0f, .10f, .003f, .45f, .34f, 2), T(1174.7f, 1174.7f, .19f, .003f, .45f, .32f, 2),
+    T(1318.5f, 1318.5f, .28f, .003f, .45f, .30f, 2), T(1480.0f, 1480.0f, .37f, .003f, .45f, .30f, 2),
+    T(1760.0f, 1760.0f, .46f, .003f, .8f, .30f, 2), T(1480.0f, 1480.0f, .60f, .003f, .4f, .24f, 2),
+    T(1318.5f, 1318.5f, .69f, .003f, .4f, .22f, 2), T(1760.0f, 1760.0f, .78f, .003f, .7f, .26f, 2),
+    T(392.0f, 392.0f, .92f, .01f, .5f, .30f, 1), T(493.9f, 493.9f, .92f, .01f, .5f, .28f, 1), T(587.3f, 587.3f, .92f, .01f, .5f, .26f, 1),
+    T(740.0f, 740.0f, .92f, .005f, .45f, .20f, 2),
+    T(146.8f, 146.8f, 1.30f, .02f, 2.2f, .42f, 1), T(293.7f, 293.7f, 1.30f, .01f, 2.0f, .40f, 1), T(440.0f, 440.0f, 1.30f, .01f, 2.0f, .34f, 1),
+    T(554.4f, 554.4f, 1.30f, .01f, 1.9f, .28f, 1), T(659.3f, 659.3f, 1.30f, .005f, 1.8f, .26f, 2), T(740.0f, 740.0f, 1.30f, .005f, 1.8f, .24f, 2),
+    T(1760.0f, 1760.0f, 1.36f, .003f, 1.2f, .20f, 2), T(2349.3f, 2349.3f, 1.48f, .003f, 1.0f, .10f, 2),
+};
 static const Tone close_[] = { T(450, 330, 0, .01f, .3f, .5f, 2), T(300, 260, .05f, .02f, .3f, .3f, 0) };
 static const Tone err[] = { T(220, 214, 0, .01f, .22f, .6f, 1), T(196, 190, .12f, .01f, .3f, .6f, 1) };
 static const Tone key[] = { T(880, 880, 0, .003f, .08f, .3f, 2) };
@@ -75,7 +87,7 @@ static const Recipe recipes[SFX_COUNT] = {
     [SFX_TURN_SIDE] = { side, N(side), { 0, .14f, .7f, .3f, 700, 1600 }, 1.7f, .35f, .62f },
     [SFX_TURN_CENTER] = { center, N(center), { 0, .14f, .7f, .3f, 800, 1800 }, 1.8f, .35f, .62f },
     [SFX_OPEN] = { openm, N(openm), { 0, .06f, .4f, .15f, 2500, 1200 }, 1.4f, .32f, .6f },
-    [SFX_START] = { start, N(start), { 0, .25f, .8f, .12f, 500, 2500 }, 1.5f, .3f, .62f },
+    [SFX_START] = { start, N(start), { 0, .35f, .9f, .10f, 900, 4500 }, 3.6f, .3f, .66f },
     [SFX_CLOSE] = { close_, N(close_), { 0, .01f, .1f, .06f, 2500, 1500 }, .5f, .22f, .5f },
     [SFX_ERROR] = { err, N(err), { 0, 0, 0, 0, 1000, 1000 }, .55f, .15f, .55f },
     [SFX_KEY] = { key, N(key), { 0, 0, 0, 0, 1000, 1000 }, .15f, .1f, .35f },
