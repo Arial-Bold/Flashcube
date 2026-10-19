@@ -1,6 +1,9 @@
-# Flashcube
+<img width="520" height="72" alt="flashcube_logo_small" src="https://github.com/user-attachments/assets/9ba9e923-1147-4693-a9fb-3b48ac499e80" />
 
-A photo album for the Nintendo GameCube, in the spirit of the Wii's Photo Channel, with a menu built like the GameCube's own: a glass cube you turn with the Control Stick.
+Flashcube a photo album for the Nintendo GameCube, in the spirit of the Wii's Photo Channel, with a menu built like the GameCube's own: a glass cube you turn with the Control Stick.
+
+<img width="1280" height="960" alt="03_album" src="https://github.com/user-attachments/assets/230ba077-fd51-484c-bc15-da046a0b27ae" />
+<img width="1280" height="960" alt="01_cube" src="https://github.com/user-attachments/assets/68a87327-72c6-481e-8519-0f7c3bcd4f0c" />
 
 Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases), copy it to your SD card, and launch `flashcube.dol` from Swiss or any other DOL loader.
 
@@ -12,6 +15,9 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 - Original menu sounds, and Flashcube's own slow, airy background music. Both are made by the GameCube as it runs.
 
 ### Album
+
+<img width="1280" height="960" alt="03_album" src="https://github.com/user-attachments/assets/a0b07abe-d1ba-4a42-a277-87710b19eb74" />
+
 - All your photos as a grid of thumbnails, with tabs for **All**, each **year**, **Folders** and **Favorites**.
 - Thumbnails appear quickly, even for big photos, and are remembered so each photo is only read once.
 
@@ -27,6 +33,9 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
   - **Delete:** remove it from the SD card (it asks first).
 
 ### Slideshow
+
+<img width="1280" height="960" alt="06_slideshow_setup" src="https://github.com/user-attachments/assets/78a72374-194b-41f5-8669-0fc40ab68ae8" />
+
 - **Fade**, **Pan & Zoom** or **Cube** transitions, 3 to 20 seconds per photo, in order or shuffled.
 - Music from your `midi` folder.
 - Press X during a slideshow for the music player:
@@ -35,18 +44,28 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
   - Which SoundFont (`.sf2`) plays the songs.
 
 ### Transfer
+
+<img width="1280" height="960" alt="09_transfer" src="https://github.com/user-attachments/assets/e6791ebb-ef42-4cfd-b0cc-579f6687b552" />
+
 - Scan the QR code on the TV with your phone, and a page served by the GameCube opens.
 - Send photos from the phone straight into the album.
 - Browse the album and save photos to the phone.
 - A computer works too: type the address shown on the TV.
 
 ### Playtime
+
+<img width="1280" height="960" alt="10_playtime" src="https://github.com/user-attachments/assets/d8adda07-60ad-4a4d-846c-a31510851b6e" />
+
+
 - **Photo Puzzle:** a sliding puzzle made from any photo, in 3x3, 4x4 or 5x5, with best times.
 - **Doodle:** draw on a photo with different colours and brushes.
 - **Color Looks:** Sepia, Black & White, Pop, Cool, Warm, Vintage and Negative.
 - Doodles and looks are saved as new photos. Your originals are never changed.
 
 ### Settings (START on the cube)
+
+<img width="1280" height="960" alt="14_settings" src="https://github.com/user-attachments/assets/2e6ecee2-9821-4297-96d0-31e1174c7fc0" />
+
 - **Screen:** 4:3 or 16:9. In 16:9 the screens spread out across the wide picture.
 - **Picture width** (full 704 or standard 640) and **video mode** (Auto, 480i, 480p).
 - **Screen margin:** moves everything in from the edges if your TV cuts them off. Gold corner marks show where the picture ends.
@@ -65,6 +84,9 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 - Works with the official Broadband Adapter or an ETH2GC-style adapter, and an SD2SP2 or SD Gecko.
 
 ## Installing
+
+<img width="1280" height="960" alt="15_software_update" src="https://github.com/user-attachments/assets/443e63fc-9157-4e2a-afdb-194a2a29d16f" />
+
 
 1. Download the latest release zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases).
 2. Copy `flashcube.dol` and the `flashcube` folder to the root of your SD card.
