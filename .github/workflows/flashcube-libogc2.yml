@@ -11,7 +11,7 @@ jobs:
       - name: Get the source code
         uses: actions/checkout@v5
 
-      - name: Download stb_image
+      - name: Download stb_image and mbedTLS
         run: sh get-deps.sh
 
       - name: Build the .dol
@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir -p package/flashcube
           cp flashcube.dol package/
-          cp sd/flashcube/README.txt package/flashcube/
+          cp sd/flashcube/README.txt sd/flashcube/cacert.pem package/flashcube/
 
       - name: Upload result
         uses: actions/upload-artifact@v6
