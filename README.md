@@ -2,7 +2,6 @@
 
 Flashcube a photo album for the Nintendo GameCube, in the spirit of the Wii's Photo Channel, with a menu built like the GameCube's own: a glass cube you turn with the Control Stick.
 
-<img width="1280" height="960" alt="03_album" src="https://github.com/user-attachments/assets/230ba077-fd51-484c-bc15-da046a0b27ae" />
 <img width="1280" height="960" alt="01_cube" src="https://github.com/user-attachments/assets/68a87327-72c6-481e-8519-0f7c3bcd4f0c" />
 
 Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases), copy it to your SD card, and launch `flashcube.dol` from Swiss or any other DOL loader.
