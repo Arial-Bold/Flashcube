@@ -315,6 +315,7 @@ static void menu_draw(float open) {
         cv.icon = 1 - clamp01(k * 2);
         cv.back_page = snake_draw;
         cv.sway = 1 - 0.7f * k;   /* calmer while playing */
+        cv.scale = 1 + 0.7f * k;   /* bigger while playing, so the game is easy to see */
         break;
     }
     case M_RETURN: {

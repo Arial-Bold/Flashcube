@@ -11,6 +11,7 @@
 #include "storage.h"
 #include "dolload.h"
 #include "update.h"
+#include "menumusic.h"
 #include "version.h"
 #include "m3d.h"
 #include <stdio.h>
@@ -240,6 +241,13 @@ void settings_panel_draw(void) {
     Color dc = rgba(0xec, 0xeb, 0xff, (u8)(255 * a));
     /* two lines at most: wrap at a space */
     const char *s = help[srow];
+    char music_info[200];
+    if (srow == S_MENU_MUSIC) {   /* with how the music is coping, to help track down problems */
+        int load, gaps;
+        menumusic_stats(&load, &gaps);
+        snprintf(music_info, sizeof(music_info), "%s (Processor: %d%%, fell behind: %d)", help[srow], load, gaps);
+        s = music_info;
+    }
     char l1[160], l2[160];
     snprintf(l1, sizeof(l1), "%s", s);
     l2[0] = 0;

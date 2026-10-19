@@ -9,5 +9,6 @@
 #define MS_RATE 18016
 
 void ms_reset(void);   /* back to the start of the piece */
+void ms_set_lite(int on);   /* a lighter mix for when the processor is busy */
 /* Renders the next `frames` stereo frames (left, right, left...) at `gain` (0..1). */
 void ms_render(int16_t *out, int frames, float gain);

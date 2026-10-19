@@ -97,8 +97,14 @@ typedef struct {
 #define NV 32
 static Voice v[NV];
 
+static int lite;   /* the lighter mix: fewer notes at once, a smaller hall */
+void ms_set_lite(int on) { lite = on; }
+
 static Voice *grab(void) {
-    for (int i = 0; i < NV; i++) if (v[i].kind == V_OFF) return &v[i];
+    int busy = 0;
+    for (int i = 0; i < NV; i++) if (v[i].kind != V_OFF) busy++;
+    if (!lite || busy < 16)
+        for (int i = 0; i < NV; i++) if (v[i].kind == V_OFF) return &v[i];
     /* all busy: take the quietest plucked note */
     Voice *best = NULL;
     for (int i = 0; i < NV; i++)
@@ -403,7 +409,13 @@ void ms_render(int16_t *out, int frames, float gain) {
             sn += (el + er) * 0.25f;
             /* the hall */
             float in = sn * 0.22f, wl = 0, wr = 0;
-            for (int k = 0; k < 4; k++) { wl += comb(&combs[0][k], in); wr += comb(&combs[1][k], in); }
+            if (lite) {
+                wl = comb(&combs[0][0], in) + comb(&combs[0][2], in);
+                wr = comb(&combs[1][1], in) + comb(&combs[1][3], in);
+                wl *= 1.6f; wr *= 1.6f;
+            } else {
+                for (int k = 0; k < 4; k++) { wl += comb(&combs[0][k], in); wr += comb(&combs[1][k], in); }
+            }
             for (int k = 0; k < 2; k++) { wl = allpass(&aps[0][k], wl); wr = allpass(&aps[1][k], wr); }
             float L = soft_clip((dl + wl * 0.6f) * 1.6f) * gain, R = soft_clip((dr + wr * 0.6f) * 1.6f) * gain;
             out[(done + i) * 2] = (int16_t)(L * 30000);
