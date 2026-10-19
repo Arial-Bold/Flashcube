@@ -17,6 +17,7 @@ Flashcube is homebrew. Launch `flashcube.dol` from Swiss (or any other DOL loade
   - Fade, Pan & Zoom, or Cube transitions.
   - 3 to 20 seconds per photo, in order or shuffled.
   - Music from the `midi` folder, played by CubeBrowser's player.
+  - The music player: press X during a slideshow (or A on the Music row before it starts) for previous / play-pause / next, shuffle, repeat, volume, and which SoundFont (`.sf2`) plays the songs.
 - **Transfer:**
   - Scan the QR code on the TV with a phone and a page served by the GameCube opens.
   - From that page you can send photos to the GameCube, or browse the album and save photos to the phone.
@@ -26,6 +27,14 @@ Flashcube is homebrew. Launch `flashcube.dol` from Swiss (or any other DOL loade
   - **Doodle:** draw on a photo.
   - **Color Looks:** Sepia, Black & White, Pop, Cool, Warm, Vintage and Negative.
   - Doodles and looks are saved as new photos. Your originals are never changed.
+
+- **Settings** (START on the cube):
+  - **Screen margin:** moves everything in from the edges of the TV (0–12%) if the top or sides are cut off. Gold corner marks show where the screen will end.
+  - **Opening animation:** turn it off to go straight to the cube.
+  - **16:9:** the album, viewer and other screens spread out across the wide screen.
+  - **Exit to Swiss:** goes back to Swiss.
+- **Long text** (file names, help text) scrolls back and forth when it doesn't fit.
+- **Sounds:** original menu sounds, made by the GameCube itself when Flashcube starts.
 
 ## The SD card
 
@@ -39,6 +48,8 @@ sd:/midi/                 .mid songs for slideshows (shared with CubeBrowser),
 sd:/flashcube/            Flashcube's own data (made automatically):
     settings.ini, favorites.txt, index.dat, puzzle.txt
     thumbs/                  the thumbnail cache
+sd:/ipl.dol               Swiss, for Exit to Swiss (if it isn't there, Flashcube
+                          looks for swiss*.dol on the card and remembers it)
 ```
 
 JPEG, PNG, BMP and GIF files are shown. The SD card can be in an SD2SP2 (Serial Port 2) or an SD Gecko (either memory card slot).
@@ -47,10 +58,10 @@ JPEG, PNG, BMP and GIF files are shown. The SD card can be in an SD2SP2 (Serial 
 
 | Where | Control |
 |---|---|
-| Cube | Stick: turn to a side · A: open it · B: turn back · START: Settings |
+| Cube | Stick: turn to a side · A: open it · B: turn back (on the front, B twice: exit to Swiss) · START: Settings |
 | Album | Stick or D-pad: select · L/R: tabs · A: open · Y: slideshow · B: back |
 | Viewer | D-pad left/right: previous/next · D-pad up/down + A: photo menu · L/R: zoom · Stick or C-stick: move · Z: full screen · B: back |
-| Slideshow | A: pause · D-pad left/right: previous/next · B: stop |
+| Slideshow | A: pause · D-pad left/right: previous/next · X: music player · B: stop |
 | Photo Puzzle | D-pad: choose a tile · A: slide it · hold Z: peek · X: size · Y: shuffle |
 | Doodle | Stick: move · hold A: draw · X: colour · Y: brush · L: undo · R twice: clear · START: save |
 | Color Looks | Up/down: choose a look · A: save a copy |
@@ -100,6 +111,7 @@ docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
 ### Developer notes
 
 - **PC test build:** `pc/` runs the whole app on a PC with scripted controller input, drawing through a small software GX (`pc/gxemu.c`). It writes screenshots and serves the Transfer page on `127.0.0.1`. Run `make -C pc apptest`, put test photos in `pc/sd:/DCIM/...`, then run `./apptest tour` from inside `pc/`.
+- **Sound previews:** `make -C pc sfxpreview && (cd pc && ./sfxpreview)` writes every menu sound to `pc/out/sfx/` as WAV files. The sounds are made in `source/sfxsynth.c`.
 - **Fonts:** `tools/make_font.py` bakes the fonts (M PLUS Rounded 1c ExtraBold and Bold, M PLUS 1p Medium and Bold) into `source/font_data.h`.
 - **Phone page:** `tools/html2c.py` turns `web/index.html` (the phone page) into `source/webpage.h`.
 
@@ -116,4 +128,4 @@ docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
 - **QR Code generator library**, (C) Project Nayuki, MIT licence (`source/qrcodegen.*`).
 - **stb_image and stb_image_write**, Sean Barrett, public domain (downloaded at build time).
 - **M PLUS fonts**, (C) The M+ FONTS Project Authors, SIL Open Font License 1.1 (`tools/FONTS-OFL.txt`).
-- **Music player, sound effects, video and SD code** from CubeBrowser.
+- **Music player, DOL loader, video and SD code** from CubeBrowser.
