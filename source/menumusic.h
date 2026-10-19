@@ -1,5 +1,5 @@
 /* menumusic.h - Flashcube's background music in the menus (musicsynth.c),
- * made in real time by a thread and played on one DSP voice. It fades out
+ * made in real time by a thread and played on two DSP voices. It fades out
  * while a song from the music folder is playing or paused, and when it's
  * turned off in Settings. */
 #pragma once
