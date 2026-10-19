@@ -15,7 +15,7 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 
 ### Album
 
-<img width="1280" height="960" alt="03_album" src="https://github.com/user-attachments/assets/a0b07abe-d1ba-4a42-a277-87710b19eb74" />
+<img width="1280" height="960" alt="03_album" src="https://github.com/user-attachments/assets/f62bdb1d-e79b-4fc3-a343-78aedaa5a865" />
 
 - All your photos as a grid of thumbnails, with tabs for **All**, each **year**, **Folders** and **Favorites**.
 - Thumbnails appear quickly, even for big photos, and are remembered so each photo is only read once.
