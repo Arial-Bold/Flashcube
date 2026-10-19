@@ -1,0 +1,11 @@
+build/
+third_party/
+*.elf
+*.dol
+*.map
+pc/out/
+pc/sd:/
+pc/shots
+pc/apptest
+pc/sfxpreview
+pc/*.log
