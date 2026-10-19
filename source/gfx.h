@@ -62,6 +62,8 @@ void gfx_reset_transform(void);
  * (cx, cy), Z pointing at the viewer. It is then seen with CSS-style
  * perspective: scale = persp / (persp - Z). */
 void gfx_begin_3d(const float m[12], float cx, float cy, float persp);
+/* In 3D mode: a triangle from three points already placed in 3D (x, y, z each). */
+void gfx_tri3d(const float *xyz9, const Color *c3);
 void gfx_end_3d(void);
 
 void gfx_set_clip(float x, float y, float w, float h);

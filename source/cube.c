@@ -57,7 +57,7 @@ static RGBA radial(float u, float v, float cx, float cy, float stop, float r, fl
 /* colour of glass kind at (u,v) in 0..1 */
 static RGBA glass_at(int kind, float u, float v) {
     if (kind == 0 || kind == 2) {
-        float k = kind == 0 ? 0.42f : 0.32f;
+        float k = kind == 0 ? 0.26f : 0.20f;
         RGBA l1 = radial(u, v, 0.78f, 0.22f, 0.55f, 70, 140, 120, k);
         RGBA l2 = radial(u, v, 0.22f, 0.82f, 0.58f, 40, 62, 150, k);
         RGBA l3;
@@ -342,6 +342,208 @@ static M34 side_turn(int side, float amount) {
     }
 }
 
+/* ------------------------------------------------------------ the bevels
+ *
+ * The cube's edges are rounded like a block of thick glass. Each face owns
+ * the half of the rounding next to it: along each edge a strip curving from
+ * the face (0 degrees) to the diagonal (45), and at each corner a patch of
+ * the sphere. They're lit per vertex: a soft light from the top left and
+ * in front, a sharp highlight, brighter towards grazing angles (as glass
+ * reflects more at a slant), and tinted green, blue or purple by which way
+ * they face, like light split through the glass. */
+
+#define BEV 9.0f    /* how far the rounding reaches in from each edge */
+
+typedef struct { float x, y, z; } V3;
+
+static V3 xf_point(const M34 *m, V3 p) {
+    V3 o = { m->m[0] * p.x + m->m[1] * p.y + m->m[2] * p.z + m->m[3], m->m[4] * p.x + m->m[5] * p.y + m->m[6] * p.z + m->m[7],
+             m->m[8] * p.x + m->m[9] * p.y + m->m[10] * p.z + m->m[11] };
+    return o;
+}
+static V3 xf_normal(const M34 *m, V3 n) {
+    V3 o = { m->m[0] * n.x + m->m[1] * n.y + m->m[2] * n.z, m->m[4] * n.x + m->m[5] * n.y + m->m[6] * n.z,
+             m->m[8] * n.x + m->m[9] * n.y + m->m[10] * n.z };
+    float l = sqrtf(o.x * o.x + o.y * o.y + o.z * o.z);
+    if (l > 1e-6f) { o.x /= l; o.y /= l; o.z /= l; }
+    return o;
+}
+
+/* light from the top left, in front (y is down) */
+#define LX -0.42f
+#define LY -0.70f
+#define LZ 0.58f
+
+static Color bevel_light(V3 n, float alpha) {
+    float hx = LX, hy = LY, hz = LZ + 1;   /* half-way between the light and the eye */
+    float hl = sqrtf(hx * hx + hy * hy + hz * hz);
+    float ndh = (n.x * hx + n.y * hy + n.z * hz) / hl;
+    if (ndh < 0) ndh = 0;
+    float sp = ndh * ndh; sp *= sp; sp *= sp; sp *= sp; sp *= sp;   /* ^32: a tight highlight */
+    float dif = n.x * LX + n.y * LY + n.z * LZ;
+    if (dif < 0) dif = 0;
+    float fr = 1 - fabsf(n.z);
+    fr *= fr;
+    /* colour split by direction: green, blue, purple around the rim */
+    float ang = atan2f(n.y, n.x) / (2 * (float)M_PI) + 0.5f;   /* 0..1 */
+    static const float C[4][3] = { { 110, 240, 190 }, { 110, 170, 255 }, { 190, 120, 255 }, { 110, 240, 190 } };
+    float f = ang * 3;
+    int i = (int)f;
+    if (i > 2) i = 2;
+    float t = f - i;
+    float r = lerpf(C[i][0], C[i + 1][0], t), g = lerpf(C[i][1], C[i + 1][1], t), b = lerpf(C[i][2], C[i + 1][2], t);
+    r = lerpf(r, 200, 0.45f); g = lerpf(g, 212, 0.45f); b = lerpf(b, 232, 0.45f);   /* mostly silvery glass */
+    float k = 0.40f + 0.55f * dif;
+    r = r * k + 255 * sp; g = g * k + 255 * sp; b = b * k + 255 * sp;
+    float a = 0.16f + 0.30f * fr + 0.28f * dif + 0.75f * sp;
+    if (n.z < 0) a *= 0.45f;   /* seen through the glass */
+    a *= alpha;
+    return rgba((u8)fminf(r, 255), (u8)fminf(g, 255), (u8)fminf(b, 255), (u8)(clamp01(a) * 255));
+}
+
+/* rotates a point of the face (and its normal) a quarter turn k times about the middle */
+static V3 quarter(V3 p, int k) {
+    for (int i = 0; i < k; i++) {
+        float x = p.x - HALF, y = p.y - HALF;
+        p.x = HALF - y;
+        p.y = HALF + x;
+    }
+    return p;
+}
+static V3 quarter_n(V3 n, int k) {
+    for (int i = 0; i < k; i++) { float x = n.x; n.x = -n.y; n.y = x; }
+    return n;
+}
+
+typedef struct { V3 p, n; } BVert;
+
+static void bevel_tri(const M34 *m, BVert a, BVert b, BVert c, float alpha) {
+    V3 pa = xf_point(m, a.p), pb = xf_point(m, b.p), pc = xf_point(m, c.p);
+    float xyz[9] = { pa.x, pa.y, pa.z, pb.x, pb.y, pb.z, pc.x, pc.y, pc.z };
+    Color col[3] = { bevel_light(xf_normal(m, a.n), alpha), bevel_light(xf_normal(m, b.n), alpha),
+                     bevel_light(xf_normal(m, c.n), alpha) };
+    gfx_tri3d(xyz, col);
+}
+
+/* a point on the rounding along the top edge (t along it, phi 0..45 degrees) */
+static BVert edge_vert(float t, float phi, int k) {
+    float s = sinf(phi), c = cosf(phi);
+    BVert v;
+    v.p = quarter((V3){ t, BEV - BEV * s, -BEV + BEV * c }, k);
+    v.n = quarter_n((V3){ 0, -s, c }, k);
+    return v;
+}
+
+/* a point on the top-left corner's rounding (a, b: 0..45 degrees towards the left and top edges) */
+static BVert corner_vert(float a, float b, int k) {
+    V3 d = { -tanf(a), -tanf(b), 1 };
+    float l = sqrtf(d.x * d.x + d.y * d.y + 1);
+    d.x /= l; d.y /= l; d.z /= l;
+    BVert v;
+    v.p = quarter((V3){ BEV + BEV * d.x, BEV + BEV * d.y, -BEV + BEV * d.z }, k);
+    v.n = quarter_n(d, k);
+    return v;
+}
+
+static void face_bevel(const M34 *m, float alpha) {
+    const float Q = (float)M_PI / 4;
+    enum { SEG = 2 };
+    for (int k = 0; k < 4; k++) {
+        for (int s = 0; s < SEG; s++) {   /* the edge */
+            float p0 = Q * s / SEG, p1 = Q * (s + 1) / SEG;
+            BVert a = edge_vert(BEV, p0, k), b = edge_vert(CUBE - BEV, p0, k), c = edge_vert(CUBE - BEV, p1, k), d = edge_vert(BEV, p1, k);
+            bevel_tri(m, a, b, c, alpha);
+            bevel_tri(m, a, c, d, alpha);
+        }
+        for (int j = 0; j < SEG; j++)     /* the corner */
+            for (int i = 0; i < SEG; i++) {
+                float a0 = Q * i / SEG, a1 = Q * (i + 1) / SEG, b0 = Q * j / SEG, b1 = Q * (j + 1) / SEG;
+                BVert a = corner_vert(a0, b0, k), b = corner_vert(a1, b0, k), c = corner_vert(a1, b1, k), d = corner_vert(a0, b1, k);
+                bevel_tri(m, a, b, c, alpha);
+                bevel_tri(m, a, c, d, alpha);
+            }
+    }
+}
+
+/* Where the rounded edge meets the flat glass, the light fades softly into
+ * the face instead of stopping at a line. */
+static void face_fade(float alpha) {
+    const float lo = BEV - 2, hi = CUBE - BEV + 2, w = 28;
+    Color e = rgba(150, 185, 235, (u8)(0.16f * 255 * alpha)), in = rgba(150, 185, 235, 0);
+    for (int k = 0; k < 4; k++) {
+        /* a band from the edge inwards, mitred at the corners */
+        float p[8] = { lo, lo, hi, lo, hi - w, lo + w, lo + w, lo + w };
+        float q[8];
+        for (int i = 0; i < 4; i++) {
+            V3 v = quarter((V3){ p[i * 2], p[i * 2 + 1], 0 }, k);
+            q[i * 2] = v.x;
+            q[i * 2 + 1] = v.y;
+        }
+        Color c4[4] = { e, e, in, in };
+        gfx_quad_colors(q, c4);
+    }
+}
+
+/* What the glass reflects. The menu's world is dark, with a teal-green
+ * light above, deep blue to the left and violet below, so as the cube
+ * turns its faces pick up sweeping colour, strongest towards the edges
+ * (each face is treated as very slightly curved, so the reflection varies
+ * across it) and dark in the middle. */
+static Color env_at(V3 r, float alpha) {
+    float up = fmaxf(0, -r.y), dn = fmaxf(0, r.y), lf = fmaxf(0, -r.x), rt = fmaxf(0, r.x);
+    float R = 40 * up + 40 * lf + 110 * dn * 0.8f + 70 * rt;
+    float G = 190 * up + 70 * lf + 60 * dn * 0.8f + 60 * rt;
+    float B = 150 * up + 220 * lf + 190 * dn * 0.8f + 150 * rt;
+    float w = up * 0.95f + lf * 0.85f + dn * 0.6f + rt * 0.45f;
+    if (w > 1e-4f) { R /= w; G /= w; B /= w; }
+    float a = 0.42f * (up * up * up * 1.6f + lf * lf * lf * 1.1f + dn * dn * dn * 0.45f + rt * rt * rt * 0.4f);
+    return rgba((u8)fminf(R, 255), (u8)fminf(G, 255), (u8)fminf(B, 255), (u8)(255 * clamp01(a * alpha)));
+}
+
+static void face_env(const M34 *m, float alpha) {
+    enum { N = 6 };
+    float xy[(N + 1) * (N + 1) * 2];
+    Color col[(N + 1) * (N + 1)];
+    const float lo = BEV - 2, span = CUBE - 2 * BEV + 4, curve = 0.9f;
+    for (int j = 0; j <= N; j++)
+        for (int i = 0; i <= N; i++) {
+            int k = j * (N + 1) + i;
+            float u = (float)i / N - 0.5f, v = (float)j / N - 0.5f;
+            xy[k * 2] = lo + span * (u + 0.5f);
+            xy[k * 2 + 1] = lo + span * (v + 0.5f);
+            V3 n = xf_normal(m, (V3){ u * curve, v * curve, 1 });
+            /* reflect the view direction (towards -z) off the glass */
+            V3 rf = { 2 * n.z * n.x, 2 * n.z * n.y, 2 * n.z * n.z - 1 };
+            float a = alpha * (n.z < 0 ? 0.15f : 1);
+            col[k] = env_at(rf, a);
+        }
+    gfx_mesh(N, N, xy, col);
+}
+
+/* A soft glare across a face, sliding as the face turns. */
+static void face_glare(const M34 *m, float alpha) {
+    V3 n = xf_normal(m, (V3){ 0, 0, 1 });
+    if (n.z <= 0.05f) return;
+    float a = alpha * n.z * 0.10f;
+    float s = 100 + 160 * (n.x - n.y) * 0.5f;   /* where the band crosses */
+    float w = 46;
+    float lo = BEV, hi = CUBE - BEV;
+    /* the band runs from the top right to the bottom left: x + y = s .. s + w */
+    for (int half = 0; half < 2; half++) {
+        float d0 = s + half * w * 0.5f, d1 = d0 + w * 0.5f;
+        /* corners of the slice, clipped to the face */
+        float x0a = fminf(hi, fmaxf(lo, d0 - lo)), y0a = d0 - x0a;
+        float x0b = fmaxf(lo, fminf(hi, d0 - hi)), y0b = d0 - x0b;
+        float x1a = fminf(hi, fmaxf(lo, d1 - lo)), y1a = d1 - x1a;
+        float x1b = fmaxf(lo, fminf(hi, d1 - hi)), y1b = d1 - x1b;
+        if (y0a < lo || y0b > hi || y1a < lo || y1b > hi) continue;
+        float p[8] = { x0a, y0a, x1a, y1a, x1b, y1b, x0b, y0b };
+        Color c0 = rgba(230, 240, 255, (u8)(255 * a * (half ? 1 : 0))), c1 = rgba(230, 240, 255, (u8)(255 * a * (half ? 0 : 1)));
+        Color c4[4] = { c0, c1, c1, c0 };
+        gfx_quad_colors(p, c4);
+    }
+}
+
 typedef struct { int kind; int face; M34 m; float z; } Item;
 
 static int cmp_item(const void *a, const void *b) {
@@ -391,9 +593,13 @@ void cube_draw(const CubeView *v) {
             continue;
         }
         int f = it->face;
+        /* the flat glass sits inside the rounded edges */
+        M34 inset = m34_mul(it->m, m34_mul(m34_translate(BEV - 2, BEV - 2, 0), m34_scale3((CUBE - 2 * BEV + 4) / CUBE, (CUBE - 2 * BEV + 4) / CUBE, 1)));
+        gfx_begin_3d(inset.m, cx, cy, PERSP);
         if (f == 0) {
-            cube_glass(0, CUBE, 7, v->alpha, true);
+            cube_glass(0, CUBE, 7, v->alpha, false);
             float la = v->labels * v->alpha;
+            gfx_begin_3d(it->m.m, cx, cy, PERSP);
             if (la > 0) {
                 label("Album", 0, v->lit == SIDE_ALBUM, la);
                 label("Slideshow", 1, v->lit == SIDE_SLIDESHOW, la);
@@ -402,13 +608,19 @@ void cube_draw(const CubeView *v) {
             }
         } else if (f == sf && v->turn > 0) {
             /* the side being shown: its glass darkens a little and its page appears */
-            cube_glass(1, CUBE, 7, v->alpha * (1 - v->turn), true);
+            cube_glass(1, CUBE, 7, v->alpha * (1 - v->turn), false);
             cube_glass(2, CUBE, 7, v->alpha * v->turn, false);
+            gfx_begin_3d(it->m.m, cx, cy, PERSP);
             float pa = clamp01((v->turn - 0.45f) / 0.55f) * v->alpha * (1 - v->collapse);
             page(&v->pages[v->side], pa);
         } else {
-            cube_glass(1, CUBE, 7, v->alpha, true);
+            cube_glass(1, CUBE, 7, v->alpha, false);
         }
+        gfx_begin_3d(it->m.m, cx, cy, PERSP);
+        face_env(&it->m, v->alpha);
+        face_fade(v->alpha);
+        face_glare(&it->m, v->alpha);
+        face_bevel(&it->m, v->alpha);
     }
     gfx_end_3d();
 }

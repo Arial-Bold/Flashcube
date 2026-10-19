@@ -303,6 +303,24 @@ void gfx_begin_3d(const float m[12], float cx, float cy, float persp) {
     load_matrix();
 }
 
+static void mode_color(void);
+
+/* A triangle given by three points already placed in 3D (x right, y down,
+ * z towards the viewer), seen in the current 3D mode's perspective. */
+void gfx_tri3d(const float *p, const Color *c) {
+    if (!p3d) return;
+    mode_color();   /* the position matrix is already plain in 3D mode */
+    BEGIN(GX_TRIANGLES, 3);
+    for (int i = 0; i < 3; i++) {
+        float d = p_persp - p[i * 3 + 2];
+        if (d < 1.0f) d = 1.0f;
+        float k = p_persp / d;
+        GX_Position2f32(p_cx + p[i * 3] * k, p_cy + p[i * 3 + 1] * k);
+        GX_Color4u8(c[i].r, c[i].g, c[i].b, c[i].a);
+    }
+    GX_End();
+}
+
 void gfx_end_3d(void) {
     p3d = false;
     load_matrix();
