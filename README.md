@@ -31,10 +31,11 @@ Flashcube is homebrew. Launch `flashcube.dol` from Swiss (or any other DOL loade
 - **Settings** (START on the cube):
   - **Screen margin:** moves everything in from the edges of the TV (0–12%) if the top or sides are cut off. Gold corner marks show where the screen will end.
   - **Opening animation:** turn it off to go straight to the cube.
+  - **Menu music:** Flashcube's own background music, on or off.
   - **16:9:** the album, viewer and other screens spread out across the wide screen.
-  - **Exit to Swiss:** goes back to Swiss.
+  - **Exit button:** start another program (`sd:/boot.dol` unless you pick a different `.dol` from the card) or restart the console. B twice on the cube does the same.
 - **Long text** (file names, help text) scrolls back and forth when it doesn't fit.
-- **Sounds:** original menu sounds, made by the GameCube itself when Flashcube starts.
+- **Sounds and music:** original menu sounds and a slow, airy background piece, all made by the GameCube itself as Flashcube runs. The music fades out while a song from the `midi` folder is playing.
 
 ## The SD card
 
@@ -48,8 +49,9 @@ sd:/midi/                 .mid songs for slideshows (shared with CubeBrowser),
 sd:/flashcube/            Flashcube's own data (made automatically):
     settings.ini, favorites.txt, index.dat, puzzle.txt
     thumbs/                  the thumbnail cache
-sd:/ipl.dol               Swiss, for Exit to Swiss (if it isn't there, Flashcube
-                          looks for swiss*.dol on the card and remembers it)
+sd:/boot.dol              started by Exit (usually Swiss). Another .dol can be
+                          chosen in Settings; if the chosen one is missing,
+                          boot.dol and then swiss*.dol are tried
 ```
 
 JPEG, PNG, BMP and GIF files are shown. The SD card can be in an SD2SP2 (Serial Port 2) or an SD Gecko (either memory card slot).
@@ -58,7 +60,7 @@ JPEG, PNG, BMP and GIF files are shown. The SD card can be in an SD2SP2 (Serial 
 
 | Where | Control |
 |---|---|
-| Cube | Stick: turn to a side · A: open it · B: turn back (on the front, B twice: exit to Swiss) · START: Settings |
+| Cube | Stick: turn to a side · A: open it · B: turn back (on the front, B twice: exit) · START: Settings |
 | Album | Stick or D-pad: select · L/R: tabs · A: open · Y: slideshow · B: back |
 | Viewer | D-pad left/right: previous/next · D-pad up/down + A: photo menu · L/R: zoom · Stick or C-stick: move · Z: full screen · B: back |
 | Slideshow | A: pause · D-pad left/right: previous/next · X: music player · B: stop |
@@ -111,7 +113,7 @@ docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
 ### Developer notes
 
 - **PC test build:** `pc/` runs the whole app on a PC with scripted controller input, drawing through a small software GX (`pc/gxemu.c`). It writes screenshots and serves the Transfer page on `127.0.0.1`. Run `make -C pc apptest`, put test photos in `pc/sd:/DCIM/...`, then run `./apptest tour` from inside `pc/`.
-- **Sound previews:** `make -C pc sfxpreview && (cd pc && ./sfxpreview)` writes every menu sound to `pc/out/sfx/` as WAV files. The sounds are made in `source/sfxsynth.c`.
+- **Sound previews:** `make -C pc sfxpreview && (cd pc && ./sfxpreview)` writes every menu sound and 2½ minutes of the menu music to `pc/out/sfx/` as WAV files. The sounds are made in `source/sfxsynth.c`, the music in `source/musicsynth.c` (played by `source/menumusic.c` on one DSP voice, kept a quarter of a second ahead by a thread).
 - **Fonts:** `tools/make_font.py` bakes the fonts (M PLUS Rounded 1c ExtraBold and Bold, M PLUS 1p Medium and Bold) into `source/font_data.h`.
 - **Phone page:** `tools/html2c.py` turns `web/index.html` (the phone page) into `source/webpage.h`.
 
