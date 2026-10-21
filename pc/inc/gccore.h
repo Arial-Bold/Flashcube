@@ -39,11 +39,16 @@ enum { GX_ALWAYS, GX_EQUAL };
 enum { GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_BL_ONE, GX_LO_CLEAR };
 enum { GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXCOORDNULL, GX_TEXMAP0, GX_TEXMAP_NULL, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY };
 enum { GX_PASSCLR = 100, GX_MODULATE = 101 };
+enum { GX_TEVSTAGE1 = 201, GX_TEVSTAGE2, GX_TEVSTAGE3, GX_TEVSTAGE4, GX_TEXCOORD1 = 211, GX_TEXCOORD2, GX_TEXCOORD3,
+       GX_CC_TEXC = 221, GX_CC_CPREV, GX_CC_KONST, GX_TEV_KCSEL_1_4 = 231, GX_MTX2x4 = 0 };
+enum { GX_TEXMTX0 = 30, GX_TEXMTX1 = 33, GX_TEXMTX2 = 36, GX_TEXMTX3 = 39 };
+void GX_SetTevKColorSel(u8 stage, u8 sel); void GX_LoadTexMtxImm(float m[3][4], u32 id, u8 type);
 enum { GX_CC_ZERO, GX_CC_RASC, GX_CA_ZERO, GX_CA_TEXA, GX_CA_RASA, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TEVPREV };
 enum { GX_TF_I4 = 0, GX_TF_I8 = 1, GX_TF_RGB565 = 4, GX_TF_RGB5A3 = 5 };
 enum { GX_CLAMP = 0, GX_REPEAT = 1 };
 enum { GX_LINEAR, GX_ANISO_1, GX_PF_RGB565_Z16, GX_PF_RGB8_Z24, GX_ZC_LINEAR, GX_GM_1_0, GX_CULL_NONE, GX_PNMTX0, GX_ORTHOGRAPHIC };
-void GX_Init(void *fifo, u32 size); void GX_SetCopyClear(GXColor c, u32 z);
+typedef struct { int dummy; } GXFifoObj;
+GXFifoObj *GX_Init(void *fifo, u32 size); void GX_InitFifoLimits(GXFifoObj *f, u32 hi, u32 lo); void GX_SetCPUFifo(GXFifoObj *f); void GX_SetGPFifo(GXFifoObj *f); void GX_SetCopyClear(GXColor c, u32 z);
 f32 GX_GetYScaleFactor(u16 a, u16 b); u32 GX_SetDispCopyYScale(f32 s);
 void GX_SetViewport(f32 x, f32 y, f32 w, f32 h, f32 n, f32 f); void GX_SetScissor(u32 x, u32 y, u32 w, u32 h);
 void GX_SetDispCopySrc(u16 a, u16 b, u16 c, u16 d); void GX_SetDispCopyDst(u16 a, u16 b);

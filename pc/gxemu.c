@@ -30,7 +30,10 @@ void VIDEO_SetNextFramebuffer(void *f) { (void)f; } void VIDEO_SetBlack(int b) {
 void VIDEO_WaitVSync(void) {}
 GXRModeObj *VIDEO_GetPreferredMode(void *x) { (void)x; return &TVNtsc480IntDf; }
 int VIDEO_GetCurrentTvMode(void) { return 0; } int VIDEO_HaveComponentCable(void) { return 0; }
-void GX_Init(void *f, u32 s) { (void)f; (void)s; } void GX_SetCopyClear(GXColor c, u32 z) { (void)c; (void)z; }
+static GXFifoObj fo_;
+GXFifoObj *GX_Init(void *f, u32 s) { (void)f; (void)s; return &fo_; }
+void GX_InitFifoLimits(GXFifoObj *f, u32 h, u32 l) { (void)f; (void)h; (void)l; }
+void GX_SetCPUFifo(GXFifoObj *f) { (void)f; } void GX_SetGPFifo(GXFifoObj *f) { (void)f; } void GX_SetCopyClear(GXColor c, u32 z) { (void)c; (void)z; }
 f32 GX_GetYScaleFactor(u16 a, u16 b) { (void)a; (void)b; return 1; } u32 GX_SetDispCopyYScale(f32 s) { (void)s; return 480; }
 void GX_SetViewport(f32 x, f32 y, f32 w, f32 h, f32 n, f32 f) { (void)x; (void)y; (void)w; (void)h; (void)n; (void)f; }
 void GX_SetScissor(u32 x, u32 y, u32 w, u32 h) { sx0 = (int)x; sy0 = (int)y; sx1 = (int)(x + w); sy1 = (int)(y + h); }
@@ -49,10 +52,18 @@ void GX_SetChanCtrl(int a, int b, int c, int d, int e, int f, int g) { (void)a; 
 void GX_SetZMode(u8 en, u8 fn, u8 upd) { zmode = !en ? 0 : (fn == GX_ALWAYS && upd) ? 1 : 2; }
 void GX_SetBlendMode(u8 t, u8 s, u8 d, u8 o) { (void)t; (void)s; (void)o; additive = d == GX_BL_ONE; }
 void GX_SetAlphaUpdate(u8 e) { (void)e; } void GX_SetColorUpdate(u8 e) { (void)e; } void GX_SetNumTevStages(u8 n) { (void)n; }
-void GX_SetNumTexGens(u32 n) { if (!n) tev = 0; }
+static int ntexgens;
+static float texoff[4][2];   /* the four looks of a smoothed picture (texture matrices) */
+static int gen_mtx[4];
+void GX_SetNumTexGens(u32 n) { ntexgens = (int)n; if (!n) tev = 0; if (n == 4) tev = 3; }
+void GX_SetTevKColorSel(u8 st, u8 sel) { (void)st; (void)sel; }
+void GX_LoadTexMtxImm(float m[3][4], u32 id, u8 type) {
+    (void)type; int k = ((int)id - GX_TEXMTX0) / 3; if (k >= 0 && k < 4) { texoff[k][0] = m[0][3]; texoff[k][1] = m[1][3]; } }
 void GX_SetTevOrder(u8 s, u8 c, u32 m, u8 col) { (void)s; (void)c; (void)m; (void)col; }
 void GX_SetTevOp(u8 s, u8 mode) { (void)s; tev = mode == GX_MODULATE ? 1 : 0; }
-void GX_SetTexCoordGen(u16 a, u32 b, u32 c, u32 d) { (void)a; (void)b; (void)c; (void)d; }
+void GX_SetTexCoordGen(u16 a, u32 b, u32 c, u32 d) {
+    (void)b; (void)c; int i = a == GX_TEXCOORD0 ? 0 : a == GX_TEXCOORD1 ? 1 : a == GX_TEXCOORD2 ? 2 : a == GX_TEXCOORD3 ? 3 : -1;
+    if (i >= 0) gen_mtx[i] = (int)d; }
 void GX_SetTevColorIn(u8 s, u8 a, u8 b, u8 c, u8 d) { (void)s; (void)a; (void)b; (void)c; (void)d; }
 void GX_SetTevColorOp(u8 s, u8 a, u8 b, u8 c, u8 d, u8 e) { (void)s; (void)a; (void)b; (void)c; (void)d; (void)e; }
 void GX_SetTevAlphaIn(u8 s, u8 a, u8 b, u8 c, u8 d) { (void)s; (void)a; (void)c; (void)d; if (b == GX_CA_TEXA) tev = 2; }
@@ -136,7 +147,16 @@ static void tri(const V *A, const V *B, const V *C) {
             float b = A->b * l1 + B->b * l2 + C->b * l3, a = A->a * l1 + B->a * l2 + C->a * l3;
             if (tev && tex) {
                 float t[4];
-                sample(A->u * l1 + B->u * l2 + C->u * l3, A->v * l1 + B->v * l2 + C->v * l3, t);
+                float u = A->u * l1 + B->u * l2 + C->u * l3, v = A->v * l1 + B->v * l2 + C->v * l3;
+                if (tev == 3) {   /* four offset looks averaged, then times the vertex colour */
+                    float acc[4] = { 0, 0, 0, 0 };
+                    for (int k = 0; k < 4; k++) {
+                        float du = gen_mtx[k] == GX_IDENTITY ? 0 : texoff[k][0], dv = gen_mtx[k] == GX_IDENTITY ? 0 : texoff[k][1];
+                        sample(u + du, v + dv, t);
+                        for (int q = 0; q < 4; q++) acc[q] += t[q] * 0.25f;
+                    }
+                    r *= acc[0]; g *= acc[1]; b *= acc[2];
+                } else sample(u, v, t);
                 if (tev == 1) { r *= t[0]; g *= t[1]; b *= t[2]; a *= t[3]; }
                 else a *= t[3];
             }
