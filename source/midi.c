@@ -18,6 +18,7 @@
 #include "settings.h"
 #include "storage.h"
 #include "thr.h"
+#include "applog.h"
 #include <ctype.h>
 #include <dirent.h>
 #include <math.h>
@@ -178,6 +179,7 @@ typedef struct {
     uint32_t c_len, c_ls, c_le, pos;
     bool c_loop, done;
     bool loop_cached;              /* ARAM: a short loop kept in loopbuf */
+    uint16_t since_stream;         /* blocks since the voice last asked for more samples */
     int16_t staging[STAGE_SAMPLES] __attribute__((aligned(32)));
     int16_t bounce[STAGE_SAMPLES + 32] __attribute__((aligned(32)));   /* ARAM copies land here */
     int16_t loopbuf[LOOP_CACHE + 32] __attribute__((aligned(32)));
@@ -186,6 +188,7 @@ typedef struct {
 static HwVoice hw[NVOICES] __attribute__((aligned(32)));
 static volatile bool hw_stop_req;
 static volatile uint32_t frame_no;   /* counts the 2 ms audio blocks */
+static volatile uint32_t stalls;     /* voices found stuck and restarted (see hw_callback) */
 static bool hw_ok;
 
 static void audio_block(void *buf, u32 len) { (void)buf; (void)len; frame_no++; }
@@ -196,6 +199,19 @@ static void audio_block(void *buf, u32 len) { (void)buf; (void)len; frame_no++; 
  * interrupts: with interrupts off, wait for any copy in progress, make ours,
  * and wait for it. (The library's own completion still reaches it: the
  * engine reports "done" once for both.) */
+/* The copy engine raises a "copy finished" interrupt for our copies too. The
+ * sound library's copy queue takes that interrupt as the end of ITS copy,
+ * and when its own copy was still running it would start the next one on
+ * top of it, so a voice's sound memory could be left half written. So when
+ * the flag wasn't already up before our copy (someone else's finish, which
+ * must still be delivered), it's cleared again after ours. */
+#define DSP_CSR (*(volatile u16 *)0xCC00500A)
+static inline bool aram_irq_pending(void) { return (DSP_CSR & 0x0020) != 0; }
+static inline void aram_irq_clear(void) {
+    u16 c = DSP_CSR & (u16)~(0x0080 | 0x0008);   /* (don't acknowledge the DSP's or audio's interrupts) */
+    DSP_CSR = (u16)(c | 0x0020);
+}
+
 static bool aram_copy(HwVoice *h, int16_t *dst, uint32_t at, uint32_t n, int16_t *bounce) {
     uint32_t src = h->c_aram + at * 2;
     uint32_t a0 = src & ~31u, a1 = (src + n * 2 + 31) & ~31u, len = a1 - a0;
@@ -204,9 +220,11 @@ static bool aram_copy(HwVoice *h, int16_t *dst, uint32_t at, uint32_t n, int16_t
     int k;
     for (k = 0; k < 200000 && AR_GetDMAStatus(); k++) {}
     if (k == 200000) { _CPU_ISR_Restore(level); return false; }
+    bool flagged = aram_irq_pending();
     DCInvalidateRange(bounce, len);
     AR_StartDMA(AR_ARAMTOMRAM, (u32)MEM_VIRTUAL_TO_PHYSICAL(bounce), a0, len);
     for (k = 0; k < 200000 && AR_GetDMAStatus(); k++) {}
+    if (k < 200000 && !flagged) aram_irq_clear();
     _CPU_ISR_Restore(level);
     if (k == 200000) return false;
     memcpy(dst, (const char *)bounce + (src - a0), n * 2);
@@ -294,7 +312,7 @@ static void hw_callback(AESNDPB *pb, u32 st) {
          * shared buffer. If the previous copy is still going, the next voice
          * would overwrite it (heard as clicks and stray noises), so wait
          * for it here; it takes a few microseconds at most. */
-        for (int k = 0; k < 4000 && AR_GetDMAStatus(); k++) {}
+        for (int k = 0; k < 20000 && AR_GetDMAStatus(); k++) {}
         if (hw_stop_req || h->want_stop) {
             AESND_SetVoiceStop(pb, true);
             h->state = HV_STOPPING;
@@ -305,10 +323,26 @@ static void hw_callback(AESNDPB *pb, u32 st) {
             hw_take_note(h);
             AESND_PlayVoice(pb, VOICE_MONO16, h->staging, STAGE_SAMPLES * 2, h->freq, 0, true);
             AESND_SetVoiceStream(pb, true);
+            h->since_stream = 0;
+        } else {
+            /* A voice that keeps playing but stops asking for more samples
+             * goes round and round the last 24 ms it was given: a loud,
+             * steady buzz until the note ends. It should ask every
+             * 576 samples; if it's gone well past that, restart it from
+             * where the note has got to. */
+            uint32_t per = h->freq > 144 ? 576u * 500u / h->freq : 2000;   /* blocks per request */
+            if (++h->since_stream > 2 * per + 12) {
+                hw_fill(h, h->staging, STAGE_SAMPLES);
+                AESND_PlayVoice(pb, VOICE_MONO16, h->staging, STAGE_SAMPLES * 2, h->freq, 0, true);
+                AESND_SetVoiceStream(pb, true);
+                h->since_stream = 0;
+                stalls++;
+            }
         }
         AESND_SetVoiceFrequency(pb, h->freq);
         AESND_SetVoiceVolume(pb, h->vl, h->vr);
     } else if (st == VOICE_STATE_STREAM) {
+        h->since_stream = 0;
         hw_fill(h, h->staging, STAGE_SAMPLES / 2);
         AESND_SetVoiceBuffer(pb, h->staging, STAGE_SAMPLES);
     }
@@ -392,6 +426,7 @@ static void hw_start(int i, const Zone *z, uint32_t freq, uint16_t vl, uint16_t 
     h->vr = vr;
     h->want_stop = false;
     hw_take_note(h);
+    h->since_stream = 0;
     h->state = HV_RUNNING;
     AESND_SetVoiceVolume(h->pb, vl, vr);
     AESND_PlayVoice(h->pb, VOICE_MONO16, h->staging, STAGE_SAMPLES * 2, freq, 0, true);
@@ -487,13 +522,20 @@ static void voice_volume(Voice *v, bool paused, uint16_t *vl, uint16_t *vr) {
     *vr = (uint16_t)(r * 256);
 }
 
+/* How many notes may sound at once: all the voices, unless the sound chip
+ * is running short of time (see seq_main), when it's lowered for a while. */
+static int voice_cap = NVOICES;
+
 static int voice_pick(void) {
-    int best = -1;
+    int best = -1, active = 0;
+    for (int i = 0; i < NVOICES; i++) active += voices[i].active;
     /* a free voice the DSP has finished with, else any free voice */
-    for (int i = 0; i < NVOICES; i++)
-        if (!voices[i].active && hw_ready(i)) return i;
-    for (int i = 0; i < NVOICES; i++)
-        if (!voices[i].active) return i;
+    if (active < voice_cap) {
+        for (int i = 0; i < NVOICES; i++)
+            if (!voices[i].active && hw_ready(i)) return i;
+        for (int i = 0; i < NVOICES; i++)
+            if (!voices[i].active) return i;
+    }
     /* all busy: take the quietest released note, else the oldest note */
     float lowest = 2;
     for (int i = 0; i < NVOICES; i++)
@@ -947,7 +989,54 @@ static void *seq_main(void *arg) {
         last = now;
         if (dt > 0.1) dt = 0.1;   /* after a long stall, don't rush through notes */
         if (state == MIDI_PLAYING && song_loaded) advance(dt);
+        static uint32_t logged;
+        if (stalls != logged) {   /* (in page.log, so it shows if the buzz guard ever had to act) */
+            logged = stalls;
+            http_log_note("music   | a stuck voice was restarted (%u so far), in %s", (unsigned)logged, current >= 0 ? songs[current] : title);
+        }
         bool busy = (state == MIDI_PLAYING);
+        /* How hard the sound chip works. If mixing a 2 ms block ever takes
+         * longer than 2 ms, the last block is played again (heard as a
+         * buzz): when it gets close, notes are let go (below). */
+        static float load_peak;
+        static int load_over, load_notes, load_cut, cap_low = NVOICES;
+        static double load_from, calm_since;
+        if (busy) {
+            float u = AESND_GetDSPProcessUsage();
+            if (u > load_peak) { load_peak = u; load_notes = voices_active(); }
+            if (u >= 100) load_over++;
+            /* Close to running out of time: let the quietest fading note go
+             * and allow fewer notes at once; when it's been calm for a
+             * second, allow one more again. */
+            if (u >= 85) {
+                int n = voices_active(), best = -1;
+                float lowest = 2;
+                for (int i = 0; i < NVOICES; i++)
+                    if (voices[i].active && voices[i].released && voices[i].level < lowest) { lowest = voices[i].level; best = i; }
+                if (best < 0 && u >= 100) {   /* over time and nothing fading: the quietest note goes */
+                    for (int i = 0; i < NVOICES; i++) {
+                        float l = voices[i].level * voices[i].vel_gain;
+                        if (voices[i].active && l < lowest) { lowest = l; best = i; }
+                    }
+                }
+                if (best >= 0) { voice_free(best); load_cut++; n--; }
+                int cap = u >= 100 ? n - 1 : n;   /* no more notes than now (fewer if over time) */
+                if (cap < voice_cap) voice_cap = cap < 12 ? 12 : cap;
+                if (voice_cap < cap_low) cap_low = voice_cap;
+                calm_since = now;
+            } else if (u < 70 && voice_cap < NVOICES && now - calm_since > 2.0) {
+                voice_cap++;
+                calm_since = now;
+            }
+            if (now - load_from >= 10) {   /* (counters kept for debugging; not written to the card here,
+                                             * since writing from this thread would delay the notes) */
+                (void)load_peak; (void)load_notes; (void)load_over; (void)load_cut; (void)cap_low;
+                load_peak = 0;
+                load_over = load_cut = 0;
+                cap_low = NVOICES;
+                load_from = now;
+            }
+        }
         thr_unlock(&lock);
         thr_sleep_ms(busy ? 4 : 20);
     }

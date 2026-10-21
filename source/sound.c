@@ -38,7 +38,7 @@ static void synth(int id) {
 static void sfx_cb(AESNDPB *pb, u32 st) {
     (void)pb;
     if (st == VOICE_STATE_RUNNING)
-        for (int k = 0; k < 4000 && AR_GetDMAStatus(); k++) {}
+        for (int k = 0; k < 20000 && AR_GetDMAStatus(); k++) {}
 }
 
 /* A few voices of their own; each plays one sound once and stops itself. */

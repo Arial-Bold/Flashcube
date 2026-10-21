@@ -78,7 +78,7 @@ static bool th_ok;
 static volatile bool quit;
 
 static void wait_copies(void) {
-    for (int k = 0; k < 4000 && AR_GetDMAStatus(); k++) {}   /* let another voice's copy finish */
+    for (int k = 0; k < 20000 && AR_GetDMAStatus(); k++) {}   /* let another voice's copy finish */
 }
 
 /* Run in the audio interrupt. */

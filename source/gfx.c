@@ -13,7 +13,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define FIFO_SIZE (256 * 1024)
+/* The ring the graphics chip reads its drawing commands from while we write
+ * them. When we get too far ahead, an interrupt pauses our writing until it
+ * catches up; that interrupt can be held up for a moment by the music, and
+ * with the library's usual margin of 16 KB we could run right round the ring
+ * and overwrite commands not yet read: the graphics chip then stops and a
+ * frame is lost (a black flash). So the ring is bigger and the pause comes at
+ * half full, leaving 384 KB of margin. */
+#define FIFO_SIZE (768 * 1024)
 #define XFB_BYTES (640 * 576 * VI_DISPLAY_PIX_SZ)
 
 static void *fifo;
@@ -137,7 +144,10 @@ void gfx_init(int video_mode, bool widescreen, bool full_width) {
 
     fifo = memalign(32, FIFO_SIZE);
     memset(fifo, 0, FIFO_SIZE);
-    GX_Init(fifo, FIFO_SIZE);
+    GXFifoObj *fo = GX_Init(fifo, FIFO_SIZE);
+    GX_InitFifoLimits(fo, FIFO_SIZE / 2, FIFO_SIZE / 4);   /* pause at half full, carry on at a quarter */
+    GX_SetCPUFifo(fo);
+    GX_SetGPFifo(fo);
     GXColor black = { 0, 0, 0, 255 };
     GX_SetCopyClear(black, 0x00FFFFFF);
     setup_gx_for_mode();

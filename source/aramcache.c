@@ -24,6 +24,13 @@ static bool wait_idle(void) {
     return false;
 }
 
+/* Our copies raise the copy engine's "finished" interrupt too, which the
+ * sound library's copy queue would take as the end of its own copy (and then
+ * start its next one on top of a copy still running: garbled sound). So
+ * unless the flag was already up (someone else's finish), it's cleared after
+ * ours. */
+#define DSP_CSR (*(volatile u16 *)0xCC00500A)
+
 static bool dma(u32 dir, void *mram, uint32_t aram, uint32_t len) {
     for (uint32_t off = 0; off < len; off += PIECE) {
         uint32_t n = len - off < PIECE ? len - off : PIECE;
@@ -31,8 +38,10 @@ static bool dma(u32 dir, void *mram, uint32_t aram, uint32_t len) {
         _CPU_ISR_Disable(level);
         bool ok = wait_idle();
         if (ok) {
+            bool flagged = (DSP_CSR & 0x0020) != 0;
             AR_StartDMA(dir, (u32)MEM_VIRTUAL_TO_PHYSICAL((char *)mram + off), aram + off, n);
             ok = wait_idle();
+            if (ok && !flagged) DSP_CSR = (u16)((DSP_CSR & (u16)~(0x0080 | 0x0008)) | 0x0020);
         }
         _CPU_ISR_Restore(level);
         if (!ok) return false;
