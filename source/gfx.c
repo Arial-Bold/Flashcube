@@ -36,7 +36,7 @@ static bool t_rotated;
 /* 3D plane */
 static bool p3d;
 static float p_m[12], p_cx, p_cy, p_persp;
-static int cur_mode = -1;     /* 0 colour, 1 text, 2 image, 3 pattern */
+static int cur_mode = -1;     /* 0 colour, 1 text, 2 image, 3 pattern, 4 smooth image */
 static bool tex_invalidate;
 static int cur_font = -1;
 static GXTexObj font_tex[FONT_COUNT];
@@ -362,6 +362,7 @@ void gfx_clear_clip(void) { GX_SetScissor(0, 0, rmode->fbWidth, rmode->efbHeight
 static void mode_color(void) {
     if (cur_mode == 0) return;
     cur_mode = 0;
+    GX_SetNumTevStages(1);
     GX_ClearVtxDesc();
     GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
     GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
@@ -373,6 +374,7 @@ static void mode_color(void) {
 static void mode_text(int font) {
     if (cur_mode != 1) {
         cur_mode = 1;
+        GX_SetNumTevStages(1);
         GX_ClearVtxDesc();
         GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
         GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
@@ -396,6 +398,7 @@ static void mode_text(int font) {
 static void mode_image(void) {
     if (cur_mode != 2) {
         cur_mode = 2;
+        GX_SetNumTevStages(1);
         GX_ClearVtxDesc();
         GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
         GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
@@ -406,6 +409,55 @@ static void mode_image(void) {
         GX_SetTevOp(GX_TEVSTAGE0, GX_MODULATE);
     }
     cur_font = -1;
+}
+
+/* A picture drawn smaller than it is: four looks into the texture, a little
+ * apart, averaged. The GPU's own filtering only blends the four nearest
+ * texels, so a photo shrunk to a half or a third skips texels and its fine
+ * detail shimmers and stair-steps as it moves; spreading four of those
+ * samples across the area each screen pixel covers smooths that out, for
+ * no extra memory. (spread: how far apart, in texels.) */
+static void mode_image_smooth(void) {
+    if (cur_mode == 4) return;
+    cur_mode = 4;
+    GX_ClearVtxDesc();
+    GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+    GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+    GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+    static const u32 mtx[4] = { GX_TEXMTX0, GX_TEXMTX1, GX_TEXMTX2, GX_TEXMTX3 };
+    static const u8 coord[4] = { GX_TEXCOORD0, GX_TEXCOORD1, GX_TEXCOORD2, GX_TEXCOORD3 };
+    static const u8 stage[5] = { GX_TEVSTAGE0, GX_TEVSTAGE1, GX_TEVSTAGE2, GX_TEVSTAGE3, GX_TEVSTAGE4 };
+    GX_SetNumTexGens(4);
+    GX_SetNumTevStages(5);
+    for (int i = 0; i < 4; i++) {
+        GX_SetTexCoordGen(coord[i], GX_TG_MTX2x4, GX_TG_TEX0, mtx[i]);
+        /* stages 0-3: a quarter of each look, added up */
+        GX_SetTevOrder(stage[i], coord[i], GX_TEXMAP0, GX_COLOR0A0);
+        GX_SetTevKColorSel(stage[i], GX_TEV_KCSEL_1_4);
+        GX_SetTevColorIn(stage[i], GX_CC_ZERO, GX_CC_TEXC, GX_CC_KONST, i ? GX_CC_CPREV : GX_CC_ZERO);
+        GX_SetTevColorOp(stage[i], GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+        GX_SetTevAlphaIn(stage[i], GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_RASA);
+        GX_SetTevAlphaOp(stage[i], GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    }
+    /* stage 4: times the vertex colour (tint and fade) */
+    GX_SetTevOrder(GX_TEVSTAGE4, GX_TEXCOORDNULL, GX_TEXMAP_NULL, GX_COLOR0A0);
+    GX_SetTevColorIn(GX_TEVSTAGE4, GX_CC_ZERO, GX_CC_CPREV, GX_CC_RASC, GX_CC_ZERO);
+    GX_SetTevColorOp(GX_TEVSTAGE4, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    GX_SetTevAlphaIn(GX_TEVSTAGE4, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_RASA);
+    GX_SetTevAlphaOp(GX_TEVSTAGE4, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+    cur_font = -1;
+}
+
+static void smooth_offsets(float du, float dv) {   /* in texture coordinates (0..1) */
+    static const u32 mtx[4] = { GX_TEXMTX0, GX_TEXMTX1, GX_TEXMTX2, GX_TEXMTX3 };
+    static const signed char sx[4] = { -1, 1, -1, 1 }, sy[4] = { -1, -1, 1, 1 };
+    for (int i = 0; i < 4; i++) {
+        Mtx m;
+        guMtxIdentity(m);
+        m[0][3] = sx[i] * du;
+        m[1][3] = sy[i] * dv;
+        GX_LoadTexMtxImm(m, mtx[i], GX_MTX2x4);
+    }
 }
 
 static inline bool sane(float v) { return isfinite(v) && v > -100000.0f && v < 100000.0f; }
@@ -878,10 +930,58 @@ void gfx_image_free(GfxImage *img) {
     img->data = NULL;
 }
 
+/* Where a point lands on the screen, in pixels (for working out how much
+ * a picture is being shrunk). */
+static void screen_point(float x, float y, float *sx, float *sy) {
+    if (p3d) {
+        float X = p_m[0] * x + p_m[1] * y + p_m[3];
+        float Y = p_m[4] * x + p_m[5] * y + p_m[7];
+        float Z = p_m[8] * x + p_m[9] * y + p_m[11];
+        float d = p_persp - Z;
+        if (d < 1.0f) d = 1.0f;
+        float k = p_persp / d;
+        x = p_cx + X * k;
+        y = p_cy + Y * k;
+    } else {
+        float x2 = t_a * x + t_b * y + t_tx;
+        y = t_c * x + t_d * y + t_ty;
+        x = x2;
+    }
+    float mx = vw * margin, my = 480.0f * margin;
+    *sx = x * rmode->fbWidth / (vw + 2 * mx);
+    *sy = y * rmode->efbHeight / (480.0f + 2 * my);
+}
+
+/* Texels per screen pixel along the quad's sides (the most of them). */
+static float shrink_of(const float *p, const float *uv) {
+    float s[8], most = 0;
+    for (int i = 0; i < 4; i++) screen_point(p[i * 2], p[i * 2 + 1], &s[i * 2], &s[i * 2 + 1]);
+    for (int i = 0; i < 4; i++) {
+        int j = (i + 1) & 3;
+        float px = s[j * 2] - s[i * 2], py = s[j * 2 + 1] - s[i * 2 + 1];
+        float tx = uv[j * 2] - uv[i * 2], ty = uv[j * 2 + 1] - uv[i * 2 + 1];
+        float pl = px * px + py * py, tl = tx * tx + ty * ty;
+        if (pl < 1.0f) continue;
+        float k = sqrtf(tl / pl);
+        if (k > most) most = k;
+    }
+    return most;
+}
+
 void gfx_image_quad(GfxImage *img, const float *p, const float *uv, Color c) {
     if (!img->data || !img->tex_w || !img->tex_h) return;
     for (int i = 0; i < 8; i++) if (!sane(p[i]) || !isfinite(uv[i])) return;
-    mode_image();
+    float shrink = shrink_of(p, uv);
+    if (shrink > 1.15f) {
+        /* the four looks a quarter of a screen pixel's width from its middle
+         * each way (up to 6 texels across: smaller than that it is a thumbnail
+         * already, and the eye doesn't catch it) */
+        float spread = 0.25f * (shrink < 6.0f ? shrink : 6.0f);
+        mode_image_smooth();
+        smooth_offsets(spread / img->tex_w, spread / img->tex_h);
+    } else {
+        mode_image();
+    }
     GX_LoadTexObj(&img->obj, GX_TEXMAP0);
     float iu = 1.0f / img->tex_w, iv = 1.0f / img->tex_h;
     BEGIN(GX_QUADS, 4);
@@ -936,6 +1036,7 @@ void gfx_pattern_rect(GfxPattern *pt, float x, float y, float w, float h, float 
     if (!pt->data || !sane(x) || !sane(y) || !sane(w) || !sane(h)) return;
     if (cur_mode != 3) {
         cur_mode = 3;
+        GX_SetNumTevStages(1);
         GX_ClearVtxDesc();
         GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
         GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);

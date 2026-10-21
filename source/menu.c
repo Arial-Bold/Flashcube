@@ -27,6 +27,7 @@ static int side, queued_side = -1;
 static float icon_clock;
 static float exit_armed_until;
 static bool intro_skip, start_played;
+static float start_wait;   /* how long the opening sound has been waited for */
 
 #define TURN_IN_S 0.95f
 #define TURN_OUT_S 0.8f
@@ -111,6 +112,7 @@ static void menu_enter(int arg) {
     set_state(M_INTRO);
     intro_skip = !g_set.intro;
     start_played = false;   /* no logo: the cube just fades in */
+    start_wait = 0;
 }
 
 static void start_turn(int s) {
@@ -141,7 +143,13 @@ static void menu_update(void) {
     case M_INTRO:
         intro_t += g_dt;
         if (input_pressed(BTN_A | BTN_START | BTN_B)) intro_t = logo_duration();
-        if (!start_played && intro_t >= (intro_skip ? 0.1f : 5.4f)) { start_played = true; sound_play(SFX_START); }
+        if (!start_played && intro_t >= (intro_skip ? 0.1f : 5.4f)) {
+            /* the sound is made in the background at start-up: if it isn't
+             * quite ready, wait for it a moment rather than skip it */
+            start_wait += g_dt;
+            if (sound_loaded(SFX_START)) { start_played = true; sound_play(SFX_START); }
+            else if (start_wait > 1.5f) start_played = true;
+        }
         if (intro_t >= (intro_skip ? 1.0f : logo_duration())) {
             set_state(M_NAV);
             menumusic_start(intro_skip ? 1.0f : 2.0f);   /* after the opening sound */

@@ -107,14 +107,27 @@ static inline float sine(float phase) {   /* phase in turns */
     return sine_tab[i] + (sine_tab[i + 1] - sine_tab[i]) * f;
 }
 
-static float env(float t, float at, float att, float dec) {
-    t -= at;
+/* An envelope: a smooth rise over att seconds starting at at, then a decay
+ * of about -40 dB over dec seconds. Stepped one sample at a time; the
+ * decay is a running multiplication (the GameCube's expf() was most of
+ * the time it took to make the sounds). */
+typedef struct { float at, att, mul, cur; } Env;
+static void env_init(Env *g, float at, float att, float dec) {
+    g->at = at;
+    g->att = att;
+    g->mul = expf(-4.6f / ((dec > 1e-4f ? dec : 1e-4f) * SFX_RATE));
+    g->cur = 1.0f;
+}
+static inline float env_next(Env *g, float t) {   /* t: this sample's time */
+    t -= g->at;
     if (t < 0) return 0;
-    if (t < att) {   /* smooth rise */
-        float k = t / att;
+    if (t < g->att) {   /* smooth rise */
+        float k = t / g->att;
         return k * k * (3 - 2 * k);
     }
-    return expf(-(t - att) * 4.6f / dec);   /* about -40 dB after dec */
+    float e = g->cur;
+    g->cur *= g->mul;
+    return e;
 }
 
 static unsigned rng = 22222;
@@ -159,9 +172,11 @@ bool sfx_render(int id, int16_t *out, int n) {
         const Tone *t = &r->tones[v];
         for (int d = 0; d < 2; d++) {
             float det = d ? 1.0035f : 0.9975f, ph = d * 0.37f;
+            Env eg;
+            env_init(&eg, t->at, t->att, t->dec);
             for (int i = 0; i < n; i++) {
                 float s = (float)i / SFX_RATE;
-                float e = env(s, t->at, t->att, t->dec);
+                float e = env_next(&eg, s);
                 if (e < 1e-4f && s > t->at + t->att) break;
                 float k = (s - t->at) / (r->length > 0 ? r->length : 1);
                 float f = (t->f0 + (t->f1 - t->f0) * (k < 0 ? 0 : k > 1 ? 1 : k)) * det;
@@ -175,14 +190,18 @@ bool sfx_render(int id, int16_t *out, int n) {
     }
     /* the breath: noise through a swept low-pass */
     if (r->breath.gain > 0) {
-        float lp1 = 0, lp2 = 0;
+        float lp1 = 0, lp2 = 0, a = 0;
+        Env eg;
+        env_init(&eg, r->breath.at, r->breath.att, r->breath.dec);
         for (int i = 0; i < n; i++) {
             float s = (float)i / SFX_RATE;
-            float e = env(s, r->breath.at, r->breath.att, r->breath.dec);
+            float e = env_next(&eg, s);
             if (e < 1e-4f && s > r->breath.at + r->breath.att) break;
-            float k = s / (r->breath.att + r->breath.dec);
-            float cut = r->breath.cut0 + (r->breath.cut1 - r->breath.cut0) * (k > 1 ? 1 : k);
-            float a = 1 - expf(-2 * (float)M_PI * cut / SFX_RATE);
+            if ((i & 15) == 0) {   /* the sweep moves slowly: every 16 samples is plenty */
+                float k = s / (r->breath.att + r->breath.dec);
+                float cut = r->breath.cut0 + (r->breath.cut1 - r->breath.cut0) * (k > 1 ? 1 : k);
+                a = 1 - expf(-2 * (float)M_PI * cut / SFX_RATE);
+            }
             lp1 += (noise() - lp1) * a;
             lp2 += (lp1 - lp2) * a;
             mix[i] += lp2 * e * r->breath.gain * 2.5f;

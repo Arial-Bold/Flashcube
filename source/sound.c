@@ -4,6 +4,7 @@
 #include "sound.h"
 #include "settings.h"
 #include "menumusic.h"
+#include "thr.h"
 #include <gccore.h>
 #include <aesndlib.h>
 #include <ogc/aram.h>
@@ -28,9 +29,34 @@ static void synth(int id) {
     memset(buf, 0, bytes);
     if (!sfx_render(id, buf, n)) { free(buf); return; }
     DCFlushRange(buf, bytes);
-    buffers[id] = buf;
     sizes[id] = bytes;
+    __sync_synchronize();   /* the size is in place before the sound counts as ready */
+    buffers[id] = buf;
 }
+
+/* The sounds are made on a thread of their own while the opening plays,
+ * instead of before anything is on screen (that took seconds, all of it a
+ * black screen). The opening's own sound first: it's needed 5 seconds in. */
+static const Sfx synth_order[] = {
+    SFX_START, SFX_HOVER, SFX_HOVER2, SFX_HOVER3, SFX_SELECT, SFX_BACK, SFX_TURN_SIDE, SFX_TURN_CENTER,
+    SFX_OPEN, SFX_CLOSE, SFX_CONFIRM, SFX_CANCEL, SFX_LOADED, SFX_KEY, SFX_ERROR,
+};
+static thr_t synth_th;
+static bool synth_started;
+static volatile bool synth_quit;
+
+static void *synth_main(void *arg) {
+    (void)arg;
+    bool done[SFX_COUNT] = { false };
+    for (unsigned k = 0; k < sizeof(synth_order) / sizeof(synth_order[0]) && !synth_quit; k++) {
+        synth(synth_order[k]);
+        done[synth_order[k]] = true;
+    }
+    for (int i = 0; i < SFX_COUNT && !synth_quit; i++) if (!done[i]) synth(i);   /* any not in the list */
+    return NULL;
+}
+
+bool sound_loaded(Sfx s) { return s >= 0 && s < SFX_COUNT && buffers[s] != NULL; }
 
 /* Before each of a voice's copies to sound memory, wait for any copy still
  * in progress: the sound library copies every voice through one shared
@@ -51,11 +77,14 @@ void sound_init(void) {
     AESND_Init();
     AESND_Pause(false);
     for (int i = 0; i < SFX_VOICES; i++) sfx_voice[i] = AESND_AllocateVoice(sfx_cb);
-    for (int i = 0; i < SFX_COUNT; i++) synth(i);
     ready = true;
+    /* below the main loop (64), above the photo scan and thumbnails */
+    synth_started = thr_create(&synth_th, synth_main, NULL, 32 * 1024, 60);
+    if (!synth_started) for (int i = 0; i < SFX_COUNT; i++) synth(i);
 }
 
 void sound_shutdown(void) {
+    if (synth_started) { synth_quit = true; thr_join(synth_th); synth_started = false; }
     if (!ready) return;
     ready = false;
     menumusic_shutdown();
