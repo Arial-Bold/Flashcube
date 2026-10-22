@@ -1103,29 +1103,32 @@ static void *seq_main(void *arg) {
             /* Close to running out of time: let the quietest fading note go
              * and allow fewer notes at once; when it's been calm for a
              * second, allow one more again. */
-            if (u >= 85) {
+            if (u >= 80) {
                 int n = voices_active(), best = -1;
                 float lowest = 2;
                 for (int i = 0; i < NVOICES; i++)
                     if (voices[i].active && voices[i].released && voices[i].level < lowest) { lowest = voices[i].level; best = i; }
-                if (best < 0 && u >= 100) {   /* over time and nothing fading: the quietest note goes */
+                if (best < 0 && u >= 95) {   /* (nearly) over time and nothing fading: the quietest note goes */
                     for (int i = 0; i < NVOICES; i++) {
                         float l = voices[i].level * voices[i].vel_gain;
                         if (voices[i].active && l < lowest) { lowest = l; best = i; }
                     }
                 }
                 if (best >= 0) { voice_free(best); load_cut++; n--; }
-                int cap = u >= 100 ? n - 1 : n;   /* no more notes than now (fewer if over time) */
+                int cap = u >= 100 ? n - 2 : u >= 95 ? n - 1 : n;   /* no more notes than now (fewer if over time) */
                 if (cap < voice_cap) voice_cap = cap < 12 ? 12 : cap;
                 if (voice_cap < cap_low) cap_low = voice_cap;
                 calm_since = now;
-            } else if (u < 70 && voice_cap < NVOICES && now - calm_since > 2.0) {
+            } else if (u < 70 && voice_cap < NVOICES && now - calm_since > 4.0) {
                 voice_cap++;
                 calm_since = now;
             }
-            if (now - load_from >= 10) {   /* (counters kept for debugging; not written to the card here,
-                                             * since writing from this thread would delay the notes) */
-                (void)load_peak; (void)load_notes; (void)load_over; (void)load_cut; (void)cap_low;
+            if (now - load_from >= 10) {
+                /* only when the sound chip came close to its limit (the line
+                 * is written later by the main thread, see app_log_later) */
+                if (load_peak >= 95 || load_over > 0)
+                    http_log_note("music   | sound chip load peak %.0f%% (%d notes), %d blocks over time, %d notes let go, lowest note limit %d, in 10 s of %s",
+                                  (double)load_peak, load_notes, load_over, load_cut, cap_low, current >= 0 ? songs[current] : title);
                 load_peak = 0;
                 load_over = load_cut = 0;
                 cap_low = NVOICES;

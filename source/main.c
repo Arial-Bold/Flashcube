@@ -232,6 +232,7 @@ void app_frame(void) {
     photos_tick();
     net_tick();
     menumusic_update();
+    app_log_flush();   /* lines the music thread noted */
     update_poll();
 
     if (fading == 1) {
