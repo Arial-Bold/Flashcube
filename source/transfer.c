@@ -70,7 +70,7 @@ static void transfer_draw(float open) {
     rc.a = (u8)(255 * pa);
     ui_text_right(FONT_MENU, 15, 1.6f, px + pw - 16, py + 9, 15, rc, right);
 
-    int nitems = 16 + 3;
+    int nitems = 16 + 4;
     float done = ui_swirl_duration(nitems);
     /* the code */
     float qx = px + 22, qy = py + 50, qs = 184;
@@ -109,9 +109,9 @@ static void transfer_draw(float open) {
     /* arriving and leaving */
     float lx = px + 244, ly = py + 50;
     ui_text(FONT_MENU, 13, 1.5f, lx + 10, ly, 22, rgba(0x73, 0x92, 0xff, (u8)(255 * pa)), "Transfers");
-    NetTransfer tr[3];
-    int n = net_recent(tr, 3);
-    for (int i = 0; i < 3; i++) {
+    NetTransfer tr[4];
+    int n = net_recent(tr, 4);
+    for (int i = 0; i < 4; i++) {
         float x = lx + 8, y = ly + 28 + i * 40, w = pw - 244 - 18, h = 34;
         float a = 1;
         bool sw = open < done;
@@ -121,7 +121,8 @@ static void transfer_draw(float open) {
         gfx_rect(x + 10 - 1.5f, y + 3 - 1.5f, 38 + 3, 28 + 3, rgba(190, 200, 215, (u8)(0.45f * 255 * a)));
         gfx_rect(x + 10, y + 3, 38, 28, rgba(0x0b, 0x0f, 0x12, (u8)(255 * a)));
         if (i < n) {
-            if (tr[i].photo >= 0) app_draw_thumb(tr[i].photo, x + 12, y + 5, 34, 24, a);
+            int photo = photos_find_key(tr[i].photo_key);
+            if (photo >= 0) app_draw_thumb(photo, x + 12, y + 5, 34, 24, a);
             char status[48];
             Color sc = rgba(0xc9, 0xd2, 0xee, (u8)(255 * a));
             if (tr[i].state == 2) { snprintf(status, sizeof(status), tr[i].to_phone ? "Sent to phone" : "Done"); sc = rgba(0x8f, 0xe0, 0xa8, (u8)(255 * a)); }
@@ -145,7 +146,7 @@ static void transfer_draw(float open) {
     if (net_received() > 0) {
         char c[64];
         snprintf(c, sizeof(c), "%d photo%s received \x7f in DCIM/100FLASH", net_received(), net_received() == 1 ? "" : "s");
-        ui_text(FONT_MENU, 12, 1.2f, lx + 18, ly + 152, 20, soft, c);
+        ui_text(FONT_MENU, 12, 1.2f, lx + 18, ly + 28 + 4 * 40 + 6, 20, soft, c);
     }
 
     float da = ramp(open, done - 0.5f, done - 0.1f);

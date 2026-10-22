@@ -79,7 +79,7 @@ int net_recent(NetTransfer *out, int cap) {
 }
 
 /* a new line at the top of the recent list; returns its slot */
-static int recent_add(const char *name, uint32_t total, bool to_phone) {
+static int recent_add(const char *name, uint32_t total, bool to_phone, uint32_t key) {
     thr_lock(&lock);
     memmove(&recent[1], &recent[0], sizeof(NetTransfer) * (NET_RECENT - 1));
     if (nrecent < NET_RECENT) nrecent++;
@@ -88,7 +88,7 @@ static int recent_add(const char *name, uint32_t total, bool to_phone) {
     recent[0].total = total;
     recent[0].state = 1;
     recent[0].to_phone = to_phone;
-    recent[0].photo = -1;
+    recent[0].photo_key = key;   /* (an arriving photo gets its key once it's in the library) */
     thr_unlock(&lock);
     return 0;
 }
@@ -110,11 +110,13 @@ void net_tick(void) {
         narrived--;
         thr_unlock(&lock);
         int idx = photos_add_file(path);
+        uint32_t key = photos_key_of(idx);
         thr_lock(&lock);
         const char *name = strrchr(path, '/');
         name = name ? name + 1 : path;
+        /* the upload with this name (a photo sent to the phone may share it) */
         for (int i = 0; i < nrecent; i++)
-            if (!strcmp(recent[i].name, name) && recent[i].photo < 0) { recent[i].photo = idx; break; }
+            if (!recent[i].to_phone && !recent[i].photo_key && !strcmp(recent[i].name, name)) { recent[i].photo_key = key; break; }
     }
     thr_unlock(&lock);
 }
@@ -286,7 +288,7 @@ static void get_photo(int fd, uint32_t key, bool download) {
     char extra[160] = "";
     if (download) snprintf(extra, sizeof(extra), "Content-Disposition: attachment; filename=\"%s\"\r\n", name);
     send_head(fd, 200, "OK", content_type(name), len, extra);
-    recent_add(name, (uint32_t)len, true);
+    recent_add(name, (uint32_t)len, true, key);
     char *buf = malloc(16384);
     long sent = 0;
     bool ok = buf != NULL;
@@ -334,7 +336,7 @@ static void post_upload(int fd, const char *query, long length, const char *pre,
         return;
     }
     setvbuf(f, NULL, _IOFBF, 32 * 1024);
-    recent_add(fname, (uint32_t)length, false);
+    recent_add(fname, (uint32_t)length, false, 0);
     long got = 0;
     bool ok = true;
     if (pre_len > 0) {
@@ -438,7 +440,7 @@ static bool bring_up(void) {
     }
     return ip[0] != 0;
 #else
-    snprintf(ip, sizeof(ip), "127.0.0.1");
+    snprintf(ip, sizeof(ip), "192.168.1.42");   /* PC tests: an address like a home network's, for screenshots */
     return true;
 #endif
 }

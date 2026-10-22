@@ -728,6 +728,25 @@ void photos_release_picture(PicRequest *req) {
 
 /* ------------------------------------------------------- for the server */
 
+uint32_t photos_key_of(int i) {
+    uint32_t k = 0;
+    thr_lock(&lock);
+    if (!scanning && i >= 0 && i < nphotos) k = photos[i].key;
+    thr_unlock(&lock);
+    return k;
+}
+
+int photos_find_key(uint32_t key) {
+    int found = -1;
+    if (!key) return -1;
+    thr_lock(&lock);
+    if (!scanning)
+        for (int i = 0; i < nphotos; i++)
+            if (photos[i].key == key) { found = i; break; }
+    thr_unlock(&lock);
+    return found;
+}
+
 bool photos_path_for_key(uint32_t key, char *out, size_t cap) {
     bool ok = false;
     thr_lock(&lock);

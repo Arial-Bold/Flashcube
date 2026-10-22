@@ -92,4 +92,8 @@ void photos_format_date(const Photo *p, char *out, size_t cap);
 
 /* For the web server (any thread). */
 bool  photos_path_for_key(uint32_t key, char *out, size_t cap);
+/* A photo's lasting identity: its place in the library changes as photos
+ * are added or removed, its key doesn't. */
+uint32_t photos_key_of(int i);           /* 0 if there's no such photo */
+int   photos_find_key(uint32_t key);     /* its place in the library now, or -1 */
 char *photos_json(size_t *len);    /* malloc'd list of every photo */

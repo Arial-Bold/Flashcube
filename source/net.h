@@ -22,7 +22,7 @@ typedef struct {
     uint32_t done, total;
     int state;                   /* 0 waiting, 1 sending, 2 done, 3 failed */
     bool to_phone;               /* a photo the phone downloaded */
-    int photo;                   /* library index once added, or -1 */
+    uint32_t photo_key;          /* which photo (see photos_key_of), or 0 */
 } NetTransfer;
 int  net_recent(NetTransfer *out, int cap);
 /* Called on the main thread each frame: adds photos that have arrived. */
