@@ -169,6 +169,8 @@ typedef struct {
     volatile int state;
     volatile uint32_t stop_frame;
     volatile uint32_t lease;       /* the audio block when the sequencer last looked after this note */
+    volatile uint32_t first_stop;  /* the audio block it was first asked to stop (for the log) */
+    volatile bool kept_going;      /* still being played well after it was stopped (counted once) */
     /* the note being played, owned by the callback while the voice runs */
     uint32_t applied;
     const int16_t *c_data;
@@ -191,6 +193,7 @@ static volatile bool hw_stop_req;
 static volatile uint32_t frame_no;   /* counts the 2 ms audio blocks */
 static volatile uint32_t stalls;     /* voices found stuck and restarted (see hw_callback) */
 static volatile uint32_t orphans;    /* voices found playing with no note behind them (see hw_callback) */
+static volatile uint32_t unstoppable;   /* voices still being played well after being stopped (see hw_callback) */
 static bool hw_ok;
 
 static void audio_block(void *buf, u32 len) { (void)buf; (void)len; frame_no++; }
@@ -321,7 +324,12 @@ static void hw_callback(AESNDPB *pb, u32 st) {
         bool orphan = frame_no - h->lease > 750;
         if (orphan && !hw_stop_req && !h->want_stop) orphans++;
         if (hw_stop_req || h->want_stop || orphan) {
+            /* silent as well as stopped: if the stop were ever lost, the
+             * voice would carry on unheard instead of as a hung note */
             AESND_SetVoiceStop(pb, true);
+            AESND_SetVoiceVolume(pb, 0, 0);
+            if (h->state != HV_STOPPING) { h->first_stop = frame_no; h->kept_going = false; }
+            else if (!h->kept_going && frame_no - h->first_stop > 10) { h->kept_going = true; unstoppable++; }
             h->state = HV_STOPPING;
             h->stop_frame = frame_no;
             return;
@@ -436,10 +444,13 @@ static void hw_start(int i, const Zone *z, uint32_t freq, uint16_t vl, uint16_t 
     h->lease = frame_no;
     hw_take_note(h);
     h->since_stream = 0;
+    /* all in one go, so the mixer never sees the voice half set up */
+    _CPU_ISR_Disable(level);
     h->state = HV_RUNNING;
     AESND_SetVoiceVolume(h->pb, vl, vr);
     AESND_PlayVoice(h->pb, VOICE_MONO16, h->staging, STAGE_SAMPLES * 2, freq, 0, true);
     AESND_SetVoiceStream(h->pb, true);
+    _CPU_ISR_Restore(level);
 }
 
 static void hw_set(int i, uint32_t freq, uint16_t vl, uint16_t vr) {
@@ -1018,6 +1029,30 @@ static void *seq_main(void *arg) {
         if (orphans != logged_orphans) {
             logged_orphans = orphans;
             http_log_note("music   | a hung note was stopped (%u so far), in %s", (unsigned)logged_orphans, current >= 0 ? songs[current] : title);
+        }
+        static uint32_t logged_unstoppable;
+        if (unstoppable != logged_unstoppable) {
+            logged_unstoppable = unstoppable;
+            http_log_note("music   | a voice kept playing after it was stopped (%u so far), in %s", (unsigned)logged_unstoppable, current >= 0 ? songs[current] : title);
+        }
+        /* A note held for a long time is normal for some songs (organs,
+         * pads), but it is also what a hung note looks like from here: the
+         * log says which, should one ever be heard again. */
+        static double long_check;
+        static uint32_t long_logged[NVOICES];
+        if (song_pos < long_check) long_check = 0;   /* a new song */
+        if (state == MIDI_PLAYING && song_pos - long_check >= 1.0) {
+            long_check = song_pos;
+            for (int i = 0; i < NVOICES; i++) {
+                Voice *v = &voices[i];
+                if (!v->active || song_pos - v->started < 20 || long_logged[i] == v->order) continue;
+                long_logged[i] = v->order;
+                http_log_note("music   | a note has played for %.0f s: channel %d, key %d, instrument %d, %s, %s%s, level %.2f, at %.0f s in %s",
+                              song_pos - v->started, v->ch + 1, v->key, chans[v->ch].program,
+                              v->z.loop ? "looping" : "one-shot", v->released ? "let go" : "still held",
+                              v->held ? " (by the sustain pedal)" : "", v->level, song_pos,
+                              current >= 0 ? songs[current] : title);
+            }
         }
         static uint32_t logged;
         if (stalls != logged) {   /* (in page.log, so it shows if the buzz guard ever had to act) */
