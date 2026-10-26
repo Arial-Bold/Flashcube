@@ -1,4 +1,9 @@
+<img width="520" height="72" alt="flashcube_logo_small" src="https://github.com/user-attachments/assets/15c88c3b-9e5f-49c0-80a6-e36b234844bf" />
+
 # Flashcube
+
+<img width="1280" height="960" alt="01_cube" src="https://github.com/user-attachments/assets/e927339d-ac14-4c21-8432-420f93150e03" />
+
 
 A photo album for the Nintendo GameCube, in the spirit of the Wii's Photo Channel, with a menu built like the GameCube's own: a glass cube you turn with the Control Stick.
 
@@ -16,6 +21,9 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 - Thumbnails appear quickly, even for big photos, and are remembered so each photo is only read once.
 
 ### Photo viewer
+
+<img width="1280" height="960" alt="03_album" src="https://github.com/user-attachments/assets/c87c073d-12c9-44a1-874b-6020bdd1ab18" />
+
 - Each photo sits in a frame shaped like the photo, with a film strip of the photos either side.
 - Zoom up to 4x with L/R and move around with the stick. Z switches to full screen.
 - The photo menu:
@@ -27,6 +35,9 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
   - **Delete:** remove it from the SD card (it asks first).
 
 ### Slideshow
+
+<img width="1280" height="960" alt="09_transfer" src="https://github.com/user-attachments/assets/49d0a2c6-3eb6-470f-9ecb-dcbce8312f00" />
+
 - **Fade**, **Pan & Zoom** or **Cube** transitions, 3 to 20 seconds per photo, in order or shuffled.
 - Music from your `midi` folder.
 - Press X during a slideshow for the music player:
@@ -35,6 +46,10 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
   - Which SoundFont (`.sf2`) plays the songs.
 
 ### Transfer
+
+<img width="1280" height="960" alt="flashcube-1 6-memory-card (1)" src="https://github.com/user-attachments/assets/392484da-029c-49a0-b5aa-b924769b5eab" />
+
+
 - Scan the QR code on the TV with your phone, and a page served by the GameCube opens.
 - Send photos from the phone straight into the album.
 - Browse the album and save photos to the phone.
