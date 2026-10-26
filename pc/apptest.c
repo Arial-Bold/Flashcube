@@ -93,6 +93,25 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 6; i++) { press(BTN_DOWN); run(3); }
         press(BTN_A); run(20); shot("d2_delete");
         press(BTN_B); run(10);
+    } else if (!strcmp(script, "cube")) {
+        run(100); shot("c2_menu"); run(120); shot("c2b_menu"); run(120); shot("c2c_menu");
+        input_test_state(0, 0, -1, 0, 0); run(14); shot("c3_turning"); run(60); input_test_state(0, 0, 0, 0, 0); run(1); shot("c4_side");
+    } else if (!strcmp(script, "egg")) {
+        hold(0, 0, -1, 70);                          /* to Album */
+        input_test_state(BTN_Z, 0, -1, 0, 0); run(30); shot("e1_rolling"); run(40);
+        input_test_state(0, 0, 0, 0, 0); run(20); shot("e2_back");
+        press(BTN_A); run(30); press(BTN_DOWN); run(40); press(BTN_LEFT); run(70); press(BTN_UP); run(20); shot("e3_playing");
+        run(400); shot("e4_over");
+        press(BTN_B); run(70); shot("e5_back_to_album");
+    } else if (!strcmp(script, "card")) {
+        hold(0, -1, 0, 70);
+        press(BTN_A); run(150); shot("k1_phone");
+        press(BTN_R); run(40); shot("k2_reading");
+        run(120); shot("k3_list");
+        press(BTN_A); run(6); shot("k5_saving");
+        run(400); shot("k6_saved");
+        press(BTN_UP); run(5); press(BTN_A); run(60); shot("k7_slot_b");
+        press(BTN_B); run(80); shot("k8_cube");
     } else if (!strcmp(script, "serve")) {
         hold(0, -1, 0, 70);
         press(BTN_A);
