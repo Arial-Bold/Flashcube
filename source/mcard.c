@@ -6,6 +6,8 @@
 #include "storage.h"
 #include "thr.h"
 #include "stb_image_write.h"
+#include "applog.h"
+#include "memstat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +30,8 @@ typedef struct {
     int jpg_len;
     uint16_t *thumb565;    /* made by the thread, turned into a texture by mcard_tick */
     int ttw, tth;
+    int card_err;          /* a CARD_ERROR_ code if reading it from the card failed */
+    char name[33];         /* its name on the card (for the log) */
 } Snap;
 
 static thr_mutex lock;
@@ -65,24 +69,24 @@ static bool on_sd(const Snap *s) {
     return storage_is_file(path);
 }
 
-/* the picture, made smaller for the list: 4x4 pixels averaged */
-static uint16_t *make_thumb(const uint8_t *rgb, int *tw, int *th) {
-    uint16_t *t = tex_alloc565(TW, TH, tw, th);
-    if (!t) return NULL;
-    for (int y = 0; y < TH; y++)
+/* the picture, made smaller for the list as it's decoded: 4x4 pixels averaged */
+typedef struct { uint16_t *t; int tw; } ThumbCtx;
+static void thumb_rows(void *ctx, int y, const uint8_t *band) {
+    ThumbCtx *c = ctx;
+    for (int ty = 0; ty < 4; ty++)
         for (int x = 0; x < TW; x++) {
             int r = 0, g = 0, b = 0;
             for (int j = 0; j < 4; j++) {
-                const uint8_t *p = rgb + ((size_t)(y * 4 + j) * MSNAP_W + x * 4) * 3;
+                const uint8_t *p = band + ((size_t)(ty * 4 + j) * MSNAP_W + x * 4) * 3;
                 for (int i = 0; i < 4; i++, p += 3) { r += p[0]; g += p[1]; b += p[2]; }
             }
-            t[tex_index(*tw, x, y)] = rgb565(r >> 4, g >> 4, b >> 4);
+            c->t[tex_index(c->tw, x, y / 4 + ty)] = rgb565(r >> 4, g >> 4, b >> 4);
         }
-    return t;
 }
 
 /* ---- reading the card ---- */
 typedef struct { char name[33]; uint8_t code[4], company[2]; } Entry;
+static void mcard_found(Snap *s, int my_gen);
 
 #ifdef GEKKO
 static uint8_t workarea[CARD_WORKAREA] __attribute__((aligned(32)));
@@ -95,6 +99,7 @@ static int read_card(int chn, int my_gen) {
     int r = CARD_ProbeEx(chn, &mem, &sect);
     if (r == CARD_ERROR_BUSY) { thr_sleep_ms(300); r = CARD_ProbeEx(chn, &mem, &sect); }
     if (r < 0) return r;
+    if (sect <= 0) sect = 8192;
     r = CARD_Mount(chn, workarea, NULL);
     if (r < 0 && r != CARD_ERROR_ENCODING) { CARD_Unmount(chn); return r; }
     static Entry list[MCARD_MAX];
@@ -130,15 +135,26 @@ static int read_card(int chn, int my_gen) {
         card_file f;
         Snap s;
         memset(&s, 0, sizeof(s));
-        if (CARD_OpenEntry(chn, &e, &f) == CARD_ERROR_READY) {
+        memcpy(s.name, list[i].name, 33);
+        int r2 = CARD_OpenEntry(chn, &e, &f);
+        if (r2 == CARD_ERROR_READY) {
             card_stat st;
             if (CARD_GetStatus(chn, f.filenum, &st) == CARD_ERROR_READY) s.pub.time = (int64_t)st.time + SECS_1970_TO_2000;
-            uint8_t *buf = memalign(32, (size_t)f.len);
-            if (buf && CARD_Read(&f, buf, (u32)f.len, 0) == CARD_ERROR_READY) s.jpg_len = msnap_extract(buf, f.len, &s.jpg);
+            int len = f.len;
+            uint8_t *buf = len > 0 ? memalign(32, (size_t)len) : NULL;
+            if (!buf) s.jpg_len = MSNAP_X_MEMORY;
+            /* a sector at a time (as the GameCube's own memory card screen does) */
+            for (int off = 0; buf && off < len && r2 == CARD_ERROR_READY; off += sect) {
+                r2 = CARD_Read(&f, buf + off, (u32)sect, (u32)off);
+                if (r2 == CARD_ERROR_BUSY) { thr_sleep_ms(50); r2 = CARD_Read(&f, buf + off, (u32)sect, (u32)off); }
+            }
+            if (buf && r2 == CARD_ERROR_READY) s.jpg_len = msnap_extract(buf, len, &s.jpg);
+            else if (buf) s.card_err = r2;
             free(buf);
             CARD_Close(&f);
+        } else {
+            s.card_err = r2;
         }
-        extern void mcard_found(Snap *s, int my_gen);
         mcard_found(&s, my_gen);
     }
     CARD_Unmount(chn);
@@ -181,13 +197,14 @@ static int read_card(int chn, int my_gen) {
         uint8_t *d = (uint8_t *)storage_read(paths[i], &len);
         Snap s;
         memset(&s, 0, sizeof(s));
+        const char *base = strrchr(paths[i], '/');
+        snprintf(s.name, sizeof(s.name), "%.32s", base ? base + 1 : paths[i]);
         if (d && len > 64) {
             s.pub.time = (int64_t)((uint32_t)d[0x28] << 24 | d[0x29] << 16 | d[0x2a] << 8 | d[0x2b]) + SECS_1970_TO_2000;
             s.jpg_len = msnap_extract(d + 64, (int)len - 64, &s.jpg);
         }
         free(d);
         thr_sleep_ms(120);   /* a real card takes a moment */
-        extern void mcard_found(Snap *s, int my_gen);
         mcard_found(&s, my_gen);
     }
     return CARD_ERROR_READY;
@@ -195,11 +212,29 @@ static int read_card(int chn, int my_gen) {
 #endif
 
 /* one snapshot read: make its thumbnail and add it to the list */
-void mcard_found(Snap *s, int my_gen) {
-    uint8_t *rgb = s->jpg_len > 0 ? malloc(MSNAP_W * MSNAP_H * 3) : NULL;
-    if (rgb && msnap_decode(s->jpg, s->jpg_len, rgb)) s->thumb565 = make_thumb(rgb, &s->ttw, &s->tth);
-    else s->pub.bad = true;
-    free(rgb);
+static void mcard_found(Snap *s, int my_gen) {
+    int err = MSNAP_OK;
+    if (s->card_err) {
+        snprintf(s->pub.why, sizeof(s->pub.why), "Card error %d", s->card_err);
+    } else if (s->jpg_len <= 0) {
+        static const char *x[] = { "", "Too small", "Out of memory", "Not a Melee snapshot", "Part is missing", "Not a picture" };
+        int k = -s->jpg_len;
+        snprintf(s->pub.why, sizeof(s->pub.why), "%s", k >= 1 && k <= 5 ? x[k] : "Can't be read");
+    } else {
+        ThumbCtx c = { tex_alloc565(TW, TH, &s->ttw, &s->tth), 0 };
+        c.tw = s->ttw;
+        if (!c.t) err = MSNAP_NO_MEMORY;
+        else err = msnap_decode_rows(s->jpg, s->jpg_len, thumb_rows, &c);
+        if (err == MSNAP_OK) s->thumb565 = c.t;
+        else {
+            free(c.t);
+            snprintf(s->pub.why, sizeof(s->pub.why), "%s", err == MSNAP_NO_MEMORY ? "Out of memory" : err == MSNAP_NOT_PICTURE ? "Not a picture" : "Picture damaged");
+        }
+    }
+    s->pub.bad = s->pub.why[0] != 0;
+    if (s->pub.bad)
+        app_log_later("Melee snapshot %s: %s (card %d, data %d, picture %d, %u KB free)", s->name, s->pub.why, s->card_err,
+                      s->jpg_len, err, (unsigned)(cb_mem_free() / 1024));
     name_for(s);
     s->pub.saved = !s->pub.bad && on_sd(s);
     thr_lock(&lock);
@@ -238,7 +273,7 @@ static void mem_write(void *ctx, void *data, int size) {
 static bool save_one(const uint8_t *jpg, int len, const char *file, char *path_out, size_t cap) {
     uint8_t *rgb = malloc(MSNAP_W * MSNAP_H * 3);
     if (!rgb) return false;
-    bool ok = msnap_decode(jpg, len, rgb);
+    bool ok = msnap_decode(jpg, len, rgb) == MSNAP_OK;
     Mem m = { 0 };
     if (ok) ok = stbi_write_png_to_func(mem_write, &m, MSNAP_W, MSNAP_H, 3, rgb, MSNAP_W * 3) && !m.fail;
     free(rgb);
@@ -271,6 +306,7 @@ static void do_save(int my_gen) {
         if (pick < 0 || !jpg) { free(jpg); break; }
         char path[96];
         bool ok = save_one(jpg, len, file, path, sizeof(path));
+        if (!ok) app_log_later("Melee snapshot %s couldn't be saved (%u KB free)", file, (unsigned)(cb_mem_free() / 1024));
         free(jpg);
         thr_lock(&lock);
         for (int i = 0; i < nsnaps && my_gen == gen; i++)

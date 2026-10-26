@@ -39,9 +39,9 @@ static int rd32(const uint8_t *p) { return (int)((uint32_t)p[0] << 24 | p[1] << 
 
 int msnap_extract(const uint8_t *file, int file_len, uint8_t **jpg) {
     *jpg = NULL;
-    if (file_len < 2 * SECTOR) return -1;
+    if (file_len < 2 * SECTOR) return MSNAP_X_SHORT;
     uint8_t *sec = malloc(SECTOR);
-    if (!sec) return -1;
+    if (!sec) return MSNAP_X_MEMORY;
     /* the first block sits at the end of sector 0, after the comment, banner
      * and icon; its position depends on the icon layout, so find it by its
      * checksum */
@@ -49,12 +49,12 @@ int msnap_extract(const uint8_t *file, int file_len, uint8_t **jpg) {
     if (decrypt(file + 7792, sec, SECTOR - 7792)) off = 7792;      /* where Melee puts it */
     for (int o = SECTOR - 64; o >= 0 && off < 0; o -= 16)
         if (decrypt(file + o, sec, SECTOR - o)) off = o;
-    if (off < 0) { free(sec); return -1; }
+    if (off < 0) { free(sec); return MSNAP_X_SCRAMBLED; }
     const uint8_t *t = sec + 0x13;       /* the save's file table */
     int total = ((t[1] & 0x3F) << 16) | (t[2] << 8) | t[3];
     int nsec = file_len / SECTOR;
     uint8_t *data = malloc(total > 0 ? total : 1);
-    if (!data || total < 0x38) { free(sec); free(data); return -1; }
+    if (!data || total < 0x38) { free(sec); free(data); return data ? MSNAP_X_NOT_SNAP : MSNAP_X_MEMORY; }
     int first = SECTOR - off - 0x20;
     int have = first < total ? first : total;
     memcpy(data, sec + 0x20, have);
@@ -70,12 +70,12 @@ int msnap_extract(const uint8_t *file, int file_len, uint8_t **jpg) {
             memcpy(data + at, sec + 0x20, n);
             found = true;
         }
-        if (!found) { free(sec); free(data); return -1; }
+        if (!found) { free(sec); free(data); return MSNAP_X_MISSING; }
     }
     free(sec);
     /* the snap struct: x0 = 4, 640x480, x8 = 3, xC = JPEG size, JPEG at 0x38 */
     int size = rd32(data + 12);
-    if (rd32(data) != 4 || size <= 0 || size > total - 0x38) { free(data); return -1; }
+    if (rd32(data) != 4 || size <= 0 || size > total - 0x38) { free(data); return MSNAP_X_NOT_SNAP; }
     memmove(data, data + 0x38, size);
     *jpg = data;
     return size;
@@ -198,10 +198,11 @@ static void block(Bits *b, const Huff *dc, const Huff *ac, const uint8_t *q, int
 
 static uint8_t clamp8(float v) { return v < 0 ? 0 : v > 255 ? 255 : (uint8_t)(v + 0.5f); }
 
-bool msnap_decode(const uint8_t *jpg, int len, uint8_t *rgb) {
+int msnap_decode_rows(const uint8_t *jpg, int len, MsnapRows rows, void *ctx) {
     uint8_t q[4][64];
     Huff *hd = calloc(4, sizeof(Huff)), *ha = calloc(4, sizeof(Huff));
-    if (!hd || !ha) { free(hd); free(ha); return false; }
+    uint8_t *band = malloc(MSNAP_W * 16 * 3);
+    if (!hd || !ha || !band) { free(hd); free(ha); free(band); return MSNAP_NO_MEMORY; }
     int w = 0, h = 0, comp_q[3] = { 0, 1, 1 }, comp_td[3] = { 0, 1, 1 }, comp_ta[3] = { 0, 1, 1 };
     const uint8_t *p = jpg, *end = jpg + len, *scan = NULL;
     memset(q, 1, sizeof(q));
@@ -238,11 +239,11 @@ bool msnap_decode(const uint8_t *jpg, int len, uint8_t *rgb) {
         }
         p = se;
     }
-    if (!scan || w != MSNAP_W || h != MSNAP_H) { free(hd); free(ha); return false; }
+    if (!scan || w != MSNAP_W || h != MSNAP_H) { free(hd); free(ha); free(band); return MSNAP_NOT_PICTURE; }
     Bits b = { scan, end, 0, 0, false };
     int pred[3] = { 0, 0, 0 };
     float Y[4][64], Cb[64], Cr[64];
-    for (int my = 0; my < h; my += 16)
+    for (int my = 0; my < h && !b.bad; my += 16) {
         for (int mx = 0; mx < w; mx += 16) {
             for (int i = 0; i < 4; i++) block(&b, &hd[comp_td[0]], &ha[comp_ta[0]], q[comp_q[0]], &pred[0], Y[i]);
             block(&b, &hd[comp_td[1]], &ha[comp_ta[1]], q[comp_q[1]], &pred[1], Cb);
@@ -251,12 +252,20 @@ bool msnap_decode(const uint8_t *jpg, int len, uint8_t *rgb) {
                 for (int x = 0; x < 16; x++) {
                     float yy = Y[(y >> 3) * 2 + (x >> 3)][(y & 7) * 8 + (x & 7)] + 128;
                     float cb = Cb[(y >> 1) * 8 + (x >> 1)], cr = Cr[(y >> 1) * 8 + (x >> 1)];
-                    uint8_t *o = rgb + ((my + y) * w + mx + x) * 3;
+                    uint8_t *o = band + (y * w + mx + x) * 3;
                     o[0] = clamp8(yy + 1.402f * cr);
                     o[1] = clamp8(yy - 0.344136f * cb - 0.714136f * cr);
                     o[2] = clamp8(yy + 1.772f * cb);
                 }
         }
-    free(hd); free(ha);
-    return !b.bad;
+        if (!b.bad) rows(ctx, my, band);
+    }
+    free(hd); free(ha); free(band);
+    return b.bad ? MSNAP_DAMAGED : MSNAP_OK;
 }
+
+static void to_full(void *ctx, int y, const uint8_t *band) {
+    memcpy((uint8_t *)ctx + (size_t)y * MSNAP_W * 3, band, MSNAP_W * 16 * 3);
+}
+
+int msnap_decode(const uint8_t *jpg, int len, uint8_t *rgb) { return msnap_decode_rows(jpg, len, to_full, rgb); }

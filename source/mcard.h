@@ -27,6 +27,7 @@ typedef struct {
     char when[32];         /* "25 Oct  21:46" */
     int64_t time;          /* seconds since 1970 */
     bool bad;              /* the picture couldn't be read */
+    char why[40];          /* why not, in a few words ("" if it's fine) */
     bool saved;            /* already on the SD card */
     bool thumb_ok;
     GfxImage thumb;        /* 160x120 */

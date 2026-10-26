@@ -342,8 +342,14 @@ static void draw_card(float px, float py, float pw, float ph, float a, float top
             gfx_rrect(x + cw - bw - 6, y2 + 6, bw, 17, 3, bc);
             ui_text(FONT_MENU_BOLD, 11, 1.1f, x + cw - bw, y2 + 6, 17, rgba(255, 255, 255, (u8)(255 * a)), b);
         }
-        ui_text_center(FONT_MENU, 12, 1.0f, x + cw / 2, y2 + th + 4, 18, s->bad ? rgba(0xff, 0x8c, 0xa0, (u8)(255 * a)) : soft,
-                       s->bad ? "Can't be read" : s->when);
+        if (s->bad) {
+            /* why it couldn't be read (scrolls if it's long) */
+            float tw = gfx_text_width_sp(FONT_MENU, 11, 1.0f, s->why, -1);
+            float tx = tw < cw - 4 ? x + (cw - tw) / 2 : x + 2;
+            ui_text_fit_scroll(FONT_MENU, 11, 1.0f, tx, y2 + th + 4, cw - 4, 18, rgba(0xff, 0x8c, 0xa0, (u8)(255 * a)), s->why);
+        } else {
+            ui_text_center(FONT_MENU, 12, 1.0f, x + cw / 2, y2 + th + 4, 18, soft, s->when);
+        }
     }
     gfx_clear_clip();
     /* more above or below */
