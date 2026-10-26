@@ -33,7 +33,7 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 
 ### Slideshow
 
-<img width="1280" height="960" alt="09_transfer" src="https://github.com/user-attachments/assets/49d0a2c6-3eb6-470f-9ecb-dcbce8312f00" />
+<img width="1280" height="960" alt="08_music_player" src="https://github.com/user-attachments/assets/ce2d0cf5-bb11-4410-b177-c71762b478a1" />
 
 - **Fade**, **Pan & Zoom** or **Cube** transitions, 3 to 20 seconds per photo, in order or shuffled.
 - Music from your `midi` folder.
