@@ -157,4 +157,4 @@ The memory card is only read; nothing on it is changed. Snapshots already on the
 - **Shared code:** the music player, DOL loader, updater, secure connection, video and SD card code come from [CubeBrowser](https://github.com/Arial-Bold/Cubebrowser).
 - The menu sounds, the background music and the cube's look are Flashcube's own. Nothing from Nintendo is included.
 
-Flashcube was built with **Claude** (by Anthropic), working with Arial-Bold.
+Designed and art-directed by Arial-Bold. Code written with AI assistance (Claude by Anthropic).
