@@ -143,6 +143,8 @@ static void slow_work(bool on) {
 
 #define STAGE_SAMPLES 1152    /* one DSP stream block is 576 samples; the first fill takes two */
 #define LOOP_CACHE 2048       /* loops up to this long are copied from audio memory once per note */
+#define CHUNK (STAGE_SAMPLES / 2)   /* what a voice asks for each time (576 samples) */
+#define RING_CHUNKS 8               /* chunks made ahead for each voice: 36 ms or more */
 
 /* A voice is only switched on while it plays a note, so the DSP mixes just
  * the notes sounding now (mixing every voice all the time can take longer
@@ -188,6 +190,13 @@ typedef struct {
     int16_t staging[STAGE_SAMPLES] __attribute__((aligned(32)));
     int16_t bounce[STAGE_SAMPLES + 32] __attribute__((aligned(32)));   /* ARAM copies land here */
     int16_t loopbuf[LOOP_CACHE + 32] __attribute__((aligned(32)));
+    /* Samples made ahead by the feeder thread (see feeder_main), so the audio
+     * interrupt only ever copies a finished chunk: each chunk is tagged with
+     * the note (gen) it belongs to, so leftovers of an old note are skipped. */
+    int16_t ring[RING_CHUNKS][CHUNK] __attribute__((aligned(32)));
+    volatile uint32_t ring_gen[RING_CHUNKS];
+    volatile uint32_t wr, rd;      /* chunks made (feeder) and used (callback) */
+    uint32_t fgen;                 /* the note the feeder is reading */
 } HwVoice;
 
 static HwVoice hw[NVOICES] __attribute__((aligned(32)));
@@ -196,13 +205,14 @@ static volatile uint32_t frame_no;   /* counts the 2 ms audio blocks */
 static volatile uint32_t stalls;     /* voices found stuck and restarted (see hw_callback) */
 static volatile uint32_t orphans;    /* voices found playing with no note behind them (see hw_callback) */
 static volatile uint32_t unstoppable;   /* voices still being played well after being stopped (see hw_callback) */
+static volatile uint32_t underruns;  /* times a voice asked for samples the feeder hadn't made yet (silence instead) */
 static bool hw_ok;
 
 /* How long the voices' callbacks keep the audio interrupt busy in a block
  * (they run with other interrupts held off, so while they run the screen's
  * interrupts wait too): the longest block and the longest single copy from
  * audio memory, in microseconds, since the log last noted them. */
-static volatile uint32_t irq_block_us, irq_block_max_us, irq_copy_max_us;
+static volatile uint32_t irq_block_us, irq_block_max_us, irq_copy_max_us;   /* (copies: now made by the feeder) */
 
 static void audio_block(void *buf, u32 len) {
     (void)buf; (void)len;
@@ -243,10 +253,16 @@ static bool aram_copy_(HwVoice *h, int16_t *dst, uint32_t at, uint32_t n, int16_
     uint32_t src = h->c_aram + at * 2;
     uint32_t a0 = src & ~31u, a1 = (src + n * 2 + 31) & ~31u, len = a1 - a0;
     u32 level;
-    _CPU_ISR_Disable(level);
     int k;
-    for (k = 0; k < 200000 && AR_GetDMAStatus(); k++) {}
-    if (k == 200000) { _CPU_ISR_Restore(level); return false; }
+    /* wait for the engine to be free with interrupts still on (the sound
+     * library's own copies come first), then take it with them off */
+    for (int tries = 0;; tries++) {
+        for (k = 0; k < 200000 && AR_GetDMAStatus(); k++) {}
+        _CPU_ISR_Disable(level);
+        if (!AR_GetDMAStatus()) break;
+        _CPU_ISR_Restore(level);
+        if (tries > 100) return false;
+    }
     bool flagged = aram_irq_pending();
     DCInvalidateRange(bounce, len);
     AR_StartDMA(AR_ARAMTOMRAM, (u32)MEM_VIRTUAL_TO_PHYSICAL(bounce), a0, len);
@@ -292,8 +308,9 @@ static void hw_fill(HwVoice *h, int16_t *dst, int n) {
     }
 }
 
-static void hw_take_note(HwVoice *h) {
-    h->applied = h->gen;
+/* The feeder (or, for a voice that's switched off, the sequencer) starts
+ * reading a new note. */
+static void feed_take(HwVoice *h) {
     h->c_data = h->data;
     h->c_fmt = h->fmt;
     h->c_packed = h->packed;
@@ -325,7 +342,36 @@ static void hw_take_note(HwVoice *h) {
         }
         h->loop_cached = ok;
     }
-    hw_fill(h, h->staging, STAGE_SAMPLES);
+}
+
+/* Makes one chunk ahead for a running voice (feeder thread). */
+static void feed_chunk(HwVoice *h) {
+    int k = (int)(h->wr % RING_CHUNKS);
+    hw_fill(h, h->ring[k], CHUNK);
+    h->ring_gen[k] = h->fgen;
+    __sync_synchronize();   /* the chunk is whole before it counts */
+    h->wr++;
+}
+
+/* Callback side: drops chunks of notes no longer playing, then counts what's
+ * ready for note `g`. */
+static uint32_t ring_ready(HwVoice *h, uint32_t g) {
+    /* (a chunk of the newest note is kept even while the old one finishes) */
+    while (h->rd != h->wr && h->ring_gen[h->rd % RING_CHUNKS] != g && h->ring_gen[h->rd % RING_CHUNKS] != h->gen) h->rd++;
+    uint32_t n = 0;
+    for (uint32_t r = h->rd; r != h->wr && h->ring_gen[r % RING_CHUNKS] == g; r++) n++;
+    return n;
+}
+
+/* Callback side: the next chunk into dst, or silence if it isn't made yet. */
+static void ring_take(HwVoice *h, int16_t *dst) {
+    if (ring_ready(h, h->applied)) {
+        memcpy(dst, h->ring[h->rd % RING_CHUNKS], CHUNK * 2);
+        h->rd++;
+    } else {
+        memset(dst, 0, CHUNK * 2);
+        if (h->gen == h->applied) underruns++;   /* (not while it waits for a new note: that's meant) */
+    }
 }
 
 /* Called by AESND (in the audio interrupt) at the start of each block for a
@@ -364,7 +410,12 @@ static void hw_callback_(AESNDPB *pb, u32 st) {
             return;
         }
         if (h->gen != h->applied) {   /* a new note on this running voice */
-            hw_take_note(h);
+            /* the feeder reads its first samples; until two chunks are made
+             * (a few ms) the voice stays quiet */
+            if (ring_ready(h, h->gen) < 2) { AESND_SetVoiceVolume(pb, 0, 0); return; }
+            h->applied = h->gen;
+            ring_take(h, h->staging);
+            ring_take(h, h->staging + CHUNK);
             AESND_PlayVoice(pb, VOICE_MONO16, h->staging, STAGE_SAMPLES * 2, h->freq, 0, true);
             AESND_SetVoiceStream(pb, true);
             h->since_stream = 0;
@@ -376,7 +427,8 @@ static void hw_callback_(AESNDPB *pb, u32 st) {
              * where the note has got to. */
             uint32_t per = h->freq > 144 ? 576u * 500u / h->freq : 2000;   /* blocks per request */
             if (++h->since_stream > 2 * per + 12) {
-                hw_fill(h, h->staging, STAGE_SAMPLES);
+                ring_take(h, h->staging);
+                ring_take(h, h->staging + CHUNK);
                 AESND_PlayVoice(pb, VOICE_MONO16, h->staging, STAGE_SAMPLES * 2, h->freq, 0, true);
                 AESND_SetVoiceStream(pb, true);
                 h->since_stream = 0;
@@ -387,7 +439,7 @@ static void hw_callback_(AESNDPB *pb, u32 st) {
         AESND_SetVoiceVolume(pb, h->vl, h->vr);
     } else if (st == VOICE_STATE_STREAM) {
         h->since_stream = 0;
-        hw_fill(h, h->staging, STAGE_SAMPLES / 2);
+        ring_take(h, h->staging);   /* made ahead by the feeder: just a copy here */
         AESND_SetVoiceBuffer(pb, h->staging, STAGE_SAMPLES);
     }
 }
@@ -399,6 +451,42 @@ static bool hw_settled(const HwVoice *h) {
 
 static bool hw_ready(int i) { return hw_ok && hw_settled(&hw[i]); }
 
+/* The feeder: reads each running voice's note ahead of the voice (from audio
+ * memory, or unpacking it), a chunk at a time, into its ring. This used to
+ * happen in the audio interrupt, where with many notes it could take longer
+ * than the 2 ms a block lasts: heard as pops and skips. It runs above the
+ * sequencer, every millisecond. */
+static thr_t feeder_thread;
+
+static void *feeder_main(void *arg) {
+    (void)arg;
+    for (;;) {
+        bool more = true;
+        for (int pass = 0; pass < RING_CHUNKS && more; pass++) {
+            more = false;
+            for (int i = 0; i < NVOICES; i++) {
+                HwVoice *h = &hw[i];
+                if (h->state != HV_RUNNING || hw_stop_req || h->want_stop) continue;
+                uint32_t g = h->gen;
+                if (g != h->fgen) {
+                    /* a new note on a running voice: read the sequencer's
+                     * settings in one go (it can't run while this does) */
+                    u32 level;
+                    _CPU_ISR_Disable(level);
+                    g = h->gen;
+                    _CPU_ISR_Restore(level);
+                    feed_take(h);
+                    h->fgen = g;
+                }
+                /* one chunk per voice per pass, so every voice gets its turn */
+                if (h->wr - h->rd < RING_CHUNKS) { feed_chunk(h); more = true; }
+            }
+        }
+        thr_sleep_ms(1);
+    }
+    return NULL;
+}
+
 static void hw_init(void) {
     for (int i = 0; i < NVOICES; i++) {
         memset(&hw[i], 0, sizeof(hw[i]));
@@ -408,6 +496,7 @@ static void hw_init(void) {
     }
     AESND_RegisterAudioCallback(audio_block);
     hw_ok = true;
+    thr_create(&feeder_thread, feeder_main, NULL, 32 * 1024, 115);   /* above the sequencer (110) */
 }
 
 static void hw_begin(void) { hw_stop_req = false; }
@@ -471,7 +560,12 @@ static void hw_start(int i, const Zone *z, uint32_t freq, uint16_t vl, uint16_t 
     h->vr = vr;
     h->want_stop = false;
     h->lease = frame_no;
-    hw_take_note(h);
+    /* switched off, so neither the callback nor the feeder is using it: read
+     * the note's first samples here, and the feeder carries on from there */
+    feed_take(h);
+    hw_fill(h, h->staging, STAGE_SAMPLES);
+    h->rd = h->wr;   /* nothing made ahead yet */
+    h->fgen = h->applied = ++h->gen;
     h->since_stream = 0;
     /* all in one go, so the mixer never sees the voice half set up */
     _CPU_ISR_Disable(level);
@@ -706,6 +800,7 @@ static char bad_level_note[200];
 
 static void voices_update(float dt, bool paused) {
     if (!(dt >= 0.0f)) dt = 0.0f;   /* (never backwards, never NaN) */
+    if (dt > 0.1f) dt = 0.1f;       /* (nor a step longer than the sequencer ever takes) */
     for (int i = 0; i < NVOICES; i++) {
         Voice *v = &voices[i];
         if (!v->active) continue;
@@ -1202,11 +1297,16 @@ static void *seq_main(void *arg) {
             if (now - load_from >= 10) {
                 /* only when the sound chip came close to its limit (the line
                  * is written later by the main thread, see app_log_later) */
-                if (load_peak >= 85 || load_over > 0 || irq_block_max_us > 400)
+                static uint32_t underruns_seen;
+                uint32_t gaps = underruns - underruns_seen;
+                underruns_seen = underruns;
+                if (load_peak >= 85 || load_over > 0 || irq_block_max_us > 400 || gaps > 0)
                     http_log_note("music   | sound chip load peak %d%% (%d notes), %d blocks over time, %d notes let go, "
-                                  "lowest note limit %d, about %.1f%% a note, audio interrupt longest %u us (copy %u us), in 10 s of %s",
+                                  "lowest note limit %d, about %.1f%% a note, audio interrupt longest %u us, "
+                                  "feeder: longest copy %u us, %u gaps, in 10 s of %s",
                                   (int)load_peak, load_notes, load_over, load_cut, cap_low, (double)dsp_per_note,
-                                  (unsigned)irq_block_max_us, (unsigned)irq_copy_max_us, current >= 0 ? songs[current] : title);
+                                  (unsigned)irq_block_max_us, (unsigned)irq_copy_max_us, (unsigned)gaps,
+                                  current >= 0 ? songs[current] : title);
                 irq_block_max_us = irq_copy_max_us = 0;
                 load_peak = 0;
                 load_over = load_cut = 0;
