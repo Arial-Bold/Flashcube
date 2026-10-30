@@ -243,7 +243,7 @@ static void get_thumb(int fd, uint32_t key) {
     uint16_t *tex = memalign(32, THUMB_BYTES);
     if (!tex) { send_text(fd, 503, "Busy", "text/plain", "busy", 4); return; }
     char cache[300];
-    snprintf(cache, sizeof(cache), "%s/thumbs/%08x.t", DATA_DIR, (unsigned)key);
+    snprintf(cache, sizeof(cache), "%s/thumbs/%08x.t", storage_dir(), (unsigned)key);
     bool ok = false;
     FILE *f = fopen(cache, "rb");
     if (f) {

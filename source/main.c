@@ -7,6 +7,7 @@
 #include "input.h"
 #include "settings.h"
 #include "storage.h"
+#include "diag.h"
 #include "photos.h"
 #include "sound.h"
 #include "midi.h"
@@ -196,6 +197,7 @@ static float frame_seconds(void) { return 1 / 60.0f; }
 
 void app_init(void) {
     bool sd = storage_init();
+    diag_init();
     settings_load();
     gfx_init(g_set.video_mode, g_set.widescreen != 0, g_set.full_width != 0);
     gfx_set_margin(g_set.margin / 100.0f);
@@ -224,14 +226,19 @@ void app_init(void) {
 }
 
 void app_frame(void) {
+    diag_frame();
+    diag_note(DIAG_MAIN, "reading the controller");
     g_dt = frame_seconds();
     g_time += g_dt;
     opened += g_dt;
     if (toast_t >= 0) { toast_t += g_dt; if (toast_t > 4) toast_t = -1; }
     input_update();
+    diag_note(DIAG_MAIN, "photos (loading and thumbnails)");
     photos_tick();
+    diag_note(DIAG_MAIN, "network (Transfer)");
     net_tick();
     menumusic_update();
+    diag_note(DIAG_MAIN, "background music and logs");
     app_log_flush();   /* lines the music thread noted */
     update_poll();
 
@@ -246,22 +253,27 @@ void app_frame(void) {
         fade -= g_dt / 0.18f;
         if (fade <= 0) { fade = 0; fading = 0; }
     } else {
+        diag_note(DIAG_MAIN, "updating screen %d", (int)cur);
         screens[cur]->update();
     }
 
+    diag_note(DIAG_MAIN, "drawing screen %d", (int)cur);
     gfx_begin_frame();
     ui_frame_begin();
     ui_text_scroll_tick();
     screens[cur]->draw(opened);
     app_draw_toast();
     if (fade > 0) gfx_fill_screen(rgba(0, 0, 0, (u8)(255 * clamp01(fade))));
+    diag_note(DIAG_MAIN, "waiting for the graphics chip to finish the frame");
     gfx_end_frame();
 }
 
 #ifndef PC_TEST
 int main(int argc, char **argv) {
+    storage_set_program(argc > 0 ? argv[0] : NULL);
     app_init();
-    update_set_program(argc > 0 ? argv[0] : NULL);   /* the .dol an update replaces */
+    update_set_program(storage_program_file());      /* the .dol an update replaces */
+    if (storage_ok()) update_remove_old();           /* this version started: the one it replaced can go */
     for (;;) app_frame();
     return 0;
 }

@@ -549,7 +549,7 @@ typedef struct { char magic[4]; uint16_t w, h; char date[20]; uint32_t pad; } Th
 
 static bool thumb_file_read(uint32_t key, uint16_t *tex, ThumbHeader *hd) {
     char path[300];
-    snprintf(path, sizeof(path), "%s/thumbs/%08x.t", DATA_DIR, (unsigned)key);
+    snprintf(path, sizeof(path), "%s/thumbs/%08x.t", storage_dir(), (unsigned)key);
     FILE *f = fopen(path, "rb");
     if (!f) return false;
     bool ok = fread(hd, 1, sizeof(*hd), f) == sizeof(*hd) && !memcmp(hd->magic, "FCT1", 4) &&
@@ -560,7 +560,7 @@ static bool thumb_file_read(uint32_t key, uint16_t *tex, ThumbHeader *hd) {
 
 static void thumb_file_write(uint32_t key, const uint16_t *tex, const ThumbHeader *hd) {
     char path[300];
-    snprintf(path, sizeof(path), "%s/thumbs/%08x.t", DATA_DIR, (unsigned)key);
+    snprintf(path, sizeof(path), "%s/thumbs/%08x.t", storage_dir(), (unsigned)key);
     FILE *f = fopen(path, "wb");
     if (!f) return;
     fwrite(hd, 1, sizeof(*hd), f);
@@ -680,13 +680,15 @@ void photos_init(void) {
 
 void photos_clear_cache(void) {
     aramcache_clear();
-    DIR *d = opendir(DATA_DIR "/thumbs");
+    char tdir[320];
+    snprintf(tdir, sizeof(tdir), "%s/thumbs/", storage_dir());
+    DIR *d = opendir(tdir);
     if (!d) return;
     struct dirent *e;
     char path[300];
     while ((e = readdir(d)) != NULL) {
         if (e->d_name[0] == '.') continue;
-        snprintf(path, sizeof(path), "%s/thumbs/%s", DATA_DIR, e->d_name);
+        snprintf(path, sizeof(path), "%s/thumbs/%s", storage_dir(), e->d_name);
         remove(path);
     }
     closedir(d);

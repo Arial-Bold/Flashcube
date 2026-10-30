@@ -43,3 +43,6 @@ void update_request_install(void);
 void update_cancel(void);
 void update_poll(void);                       /* once per frame */
 bool update_restart(char *err, size_t errlen);   /* starts the newly installed .dol */
+/* At start: deletes the previous version left by an update (<name>.old), now
+ * that this one has started, so old versions don't pile up on the card. */
+void update_remove_old(void);
