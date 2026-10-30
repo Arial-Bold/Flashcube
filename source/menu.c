@@ -167,7 +167,7 @@ static void menu_update(void) {
             update_panel_open(false);
         }
         else if (input_pressed(BTN_B)) {
-            /* B twice: back to Swiss (or whatever Exit is set to do) */
+            /* B twice: back to the launcher (or whatever Exit is set to do) */
             if (g_time < exit_armed_until) { exit_armed_until = 0; app_exit(); }
             else {
                 exit_armed_until = g_time + 3;

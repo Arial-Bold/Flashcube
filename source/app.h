@@ -26,8 +26,8 @@ ScreenId app_screen(void);
 const Screen *app_screen_def(ScreenId s);
 void app_adopt(ScreenId s, float already_open);
 void app_init(void);
-/* Starts Swiss (false, with a message shown, if it couldn't). */
-const char *app_exit_label(void);  /* "Exit to Swiss", "Restart"... */
+/* Starts the launcher, or whatever Exit is set to (false, with a message shown, if it couldn't). */
+const char *app_exit_label(void);  /* "Exit to Launcher", "Restart"... */
 bool app_exit(void);                 /* Settings > Exit: start the chosen .dol, or restart */
 void app_frame(void);
 

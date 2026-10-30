@@ -85,7 +85,7 @@ void app_draw_toast(void) {
     float a = clamp01(toast_t / 0.2f) * clamp01((3.2f - toast_t) / 0.4f);
     if (a <= 0) return;
     float w = gfx_text_width_sp(FONT_MENU, 14, 1.2f, toast, -1) + 40;
-    float x = gfx_width() / 2 - w / 2, y = 4;   /* across the top, clear of the hints */
+    float x = gfx_width() / 2 - w / 2, y = 22;   /* across the top, clear of the edge (TVs cut a little off) */
     ui_desc(x, y, w, 34, a);
     ui_text_center(FONT_MENU, 14, 1.2f, gfx_width() / 2, y, 34, rgba(0xec, 0xeb, 0xff, (u8)(255 * a)), toast);
 }
@@ -117,16 +117,15 @@ void app_prefetch_view(int pos, int ahead) {
     }
 }
 
-/* Leaves Flashcube for Swiss, as CubeBrowser does: the Swiss .dol from the
- * settings, or the first swiss*.dol found on the card (remembered). */
-/* What Exit does, for buttons and hints: "Exit to Swiss", "Restart"... */
+/* What Exit does, for buttons and hints: "Exit to Launcher", "Restart"...
+ * (the launcher, or another .dol picked in Settings, by name) */
 const char *app_exit_label(void) {
     static char buf[64];
     if (g_set.exit_action == EXIT_RESTART) return "Restart";
     const char *name = strrchr(g_set.swiss_dol, '/');
     name = name ? name + 1 : g_set.swiss_dol;
     if (!strncasecmp(name, "swiss", 5) || !strcasecmp(name, "boot.dol") || !strcasecmp(name, "ipl.dol") || !name[0])
-        return "Exit to Swiss";
+        return "Exit to Launcher";
     snprintf(buf, sizeof(buf), "Exit to %.40s", name);
     char *dot = strrchr(buf, '.');
     if (dot && !strcasecmp(dot, ".dol")) *dot = 0;
@@ -135,7 +134,7 @@ const char *app_exit_label(void) {
 
 /* Leaves Flashcube the way Settings > Exit says: starts the chosen .dol
  * (boot.dol unless another was picked) or restarts the console. If the .dol
- * isn't there, boot.dol and then a Swiss .dol on the card are tried. */
+ * isn't there, boot.dol and then a launcher .dol on the card are tried. */
 bool app_exit(void) {
     char err[256];
     settings_save();
