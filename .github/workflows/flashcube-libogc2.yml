@@ -19,8 +19,11 @@ jobs:
 
       - name: Gather files for the SD card
         run: |
+          # the app's folder for the card (it goes in sd:/apps): Flashcube as
+          # default.dol, its banner, and the files it keeps beside it
           mkdir -p package/flashcube
-          cp flashcube.dol package/
+          cp flashcube.dol package/flashcube/default.dol
+          cp dist/opening.bnr package/flashcube/
           cp sd/flashcube/README.txt sd/flashcube/cacert.pem package/flashcube/
 
       - name: Upload result
