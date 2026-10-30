@@ -2,7 +2,7 @@
 
 A photo album for the Nintendo GameCube, in the spirit of the Wii's Photo Channel, with a menu built like the GameCube's own: a glass cube you turn with the Control Stick.
 
-Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases), copy its `flashcube` folder to `apps` on your SD card, and launch Flashcube from Swiss or any other DOL loader.
+Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases), copy its `flashcube` folder to `apps` on your SD card, and launch Flashcube from your launcher or any other DOL loader.
 
 ## Features
 
@@ -57,7 +57,7 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 - **Clear thumbnails.**
 - **Software update:** checks GitHub for a new version, shows what's new, and installs it for you. The old version is kept as a `.old` file. With *Check for updates at start* on, a gold tag on the cube tells you when there's a new version; press Z to see it.
 - **Exit:**
-  - Start another program (`sd:/boot.dol`, usually Swiss, or any `.dol` you pick from the card), or restart the console.
+  - Start another program (`sd:/boot.dol`, usually your launcher, or any `.dol` you pick from the card), or restart the console.
   - Press B twice on the cube to exit.
 
 ### Everywhere
@@ -69,9 +69,9 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 
 1. Download the latest release zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases).
 2. Copy the `flashcube` folder from the zip into an `apps` folder at the root
-   of your SD card (`sd:/apps/flashcube`). This is the layout Swiss and other
-   launchers expect, and they show Flashcube with its own banner.
-3. Put your photos in `DCIM` (see below) and start Flashcube from Swiss.
+   of your SD card (`sd:/apps/flashcube`). This is the layout launchers
+   expect, and they show Flashcube with its own banner.
+3. Put your photos in `DCIM` (see below) and start Flashcube from your launcher.
 
 From then on, Flashcube can update itself from **Settings > Software update**.
 After an update, the previous version is deleted once the new one has started.
@@ -97,7 +97,7 @@ sd:/apps/flashcube/       Flashcube's own folder:
     cacert.pem               certificates for checking GitHub for updates
     README.txt
     settings.ini, favorites.txt, index.dat, puzzle.txt, thumbs/   (made automatically)
-sd:/boot.dol              started by Exit (usually Swiss)
+sd:/boot.dol              started by Exit (usually your launcher)
 ```
 
 JPEG, PNG, BMP and GIF photos are shown.
