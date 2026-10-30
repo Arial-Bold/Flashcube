@@ -806,6 +806,7 @@ static void voices_update(float dt, bool paused) {
         if (!v->active) continue;
         if (!paused) {
             const Zone *z = &v->z;
+            float before = v->level;   /* (to fall back on, see below) */
             v->stage_t += dt;
             switch (v->stage) {
             case ENV_ATTACK:
@@ -838,12 +839,15 @@ static void voices_update(float dt, bool paused) {
              * right, and note in the log what the note was. */
             if (!isfinite(v->level) || v->level > 1.01f || v->level < 0.0f) {
                 bad_levels++;
+                union { float f; uint32_t u; } bits = { .f = dt };
                 if (!bad_level_note[0])
                     snprintf(bad_level_note, sizeof(bad_level_note),
-                             "channel %d, key %d, instrument %d, stage %d, level %g, step %g s, attack %g, decay %g, sustain %g, release %g",
-                             v->ch + 1, v->key, chans[v->ch].program, v->stage, (double)v->level, (double)dt,
-                             (double)z->attack, (double)z->decay, (double)z->sustain, (double)z->release);
-                v->level = v->level > 0.0f ? 1.0f : 0.0f;   /* (inf counts as loud, NaN as silent) */
+                             "channel %d, key %d, instrument %d, stage %d, level %g (was %g), step %g s (%08x), attack %g, decay %g, sustain %g, release %g",
+                             v->ch + 1, v->key, chans[v->ch].program, v->stage, (double)v->level, (double)before, (double)dt,
+                             (unsigned)bits.u, (double)z->attack, (double)z->decay, (double)z->sustain, (double)z->release);
+                /* back to where it was, rather than jumping to full loudness
+                 * (heard as a pop); nonsense before as well: silent */
+                v->level = (isfinite(before) && before >= 0.0f && before <= 1.0f) ? before : 0.0f;
                 if (!isfinite(z->sustain) || z->sustain > 1) v->z.sustain = 1;
             }
             if (song_pos >= v->ends) v->stage = ENV_DONE;
