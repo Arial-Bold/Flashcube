@@ -1,10 +1,8 @@
-<img width="520" height="72" alt="flashcube_logo_small" src="https://github.com/user-attachments/assets/15c88c3b-9e5f-49c0-80a6-e36b234844bf" />
-
 # Flashcube
 
 A photo album for the Nintendo GameCube, in the spirit of the Wii's Photo Channel, with a menu built like the GameCube's own: a glass cube you turn with the Control Stick.
 
-Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases), copy it to your SD card, and launch `flashcube.dol` from Swiss or any other DOL loader.
+Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases), copy its `flashcube` folder to `apps` on your SD card, and launch Flashcube from Swiss or any other DOL loader.
 
 ## Features
 
@@ -18,9 +16,6 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 - Thumbnails appear quickly, even for big photos, and are remembered so each photo is only read once.
 
 ### Photo viewer
-
-<img width="1280" height="960" alt="03_album" src="https://github.com/user-attachments/assets/c87c073d-12c9-44a1-874b-6020bdd1ab18" />
-
 - Each photo sits in a frame shaped like the photo, with a film strip of the photos either side.
 - Zoom up to 4x with L/R and move around with the stick. Z switches to full screen.
 - The photo menu:
@@ -32,9 +27,6 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
   - **Delete:** remove it from the SD card (it asks first).
 
 ### Slideshow
-
-<img width="1280" height="960" alt="08_music_player" src="https://github.com/user-attachments/assets/ce2d0cf5-bb11-4410-b177-c71762b478a1" />
-
 - **Fade**, **Pan & Zoom** or **Cube** transitions, 3 to 20 seconds per photo, in order or shuffled.
 - Music from your `midi` folder.
 - Press X during a slideshow for the music player:
@@ -43,10 +35,6 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
   - Which SoundFont (`.sf2`) plays the songs.
 
 ### Transfer
-
-<img width="1280" height="960" alt="flashcube-1 6-memory-card (1)" src="https://github.com/user-attachments/assets/392484da-029c-49a0-b5aa-b924769b5eab" />
-
-
 - Scan the QR code on the TV with your phone, and a page served by the GameCube opens.
 - Send photos from the phone straight into the album.
 - Browse the album and save photos to the phone.
@@ -80,10 +68,18 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 ## Installing
 
 1. Download the latest release zip from [Releases](https://github.com/Arial-Bold/Flashcube/releases).
-2. Copy `flashcube.dol` and the `flashcube` folder to the root of your SD card.
-3. Put your photos in `DCIM` (see below) and start `flashcube.dol` from Swiss.
+2. Copy the `flashcube` folder from the zip into an `apps` folder at the root
+   of your SD card (`sd:/apps/flashcube`). This is the layout Swiss and other
+   launchers expect, and they show Flashcube with its own banner.
+3. Put your photos in `DCIM` (see below) and start Flashcube from Swiss.
 
 From then on, Flashcube can update itself from **Settings > Software update**.
+After an update, the previous version is deleted once the new one has started.
+
+Coming from an older version kept at the root of the card (`flashcube.dol`
+with a `flashcube` folder)? Flashcube moves your settings, favourites and
+thumbnails into `apps/flashcube` by itself the first time it starts from there;
+the old `flashcube.dol` can then be deleted.
 
 ## The SD card
 
@@ -95,7 +91,9 @@ sd:/DCIM/                 your photos, as a camera stores them:
     MELEE/                   snapshots copied from a Melee memory card
 sd:/midi/                 .mid songs for slideshows (shared with CubeBrowser),
                           plus an optional .sf2 SoundFont
-sd:/flashcube/            Flashcube's own folder:
+sd:/apps/flashcube/       Flashcube's own folder:
+    default.dol              Flashcube itself
+    opening.bnr              its banner and description in launchers
     cacert.pem               certificates for checking GitHub for updates
     README.txt
     settings.ini, favorites.txt, index.dat, puzzle.txt, thumbs/   (made automatically)
@@ -144,6 +142,7 @@ The memory card is only read; nothing on it is changed. Snapshots already on the
 - **How many photos:** up to 4,000 photos in up to 64 folders.
 - **Transfer speed:** about 100 to 300 KB/s, the network adapter's pace.
 - **Updates:** need the network adapter and an internet connection.
+- **Reporting a problem:** Flashcube keeps notes in its folder (`apps/flashcube`). `flashcube.log` records music hiccups (how hard the sound chip worked, skipped bits, stuck notes) and other events; `freeze.log` is written if the screen stops for 10 seconds, saying what Flashcube and the music were doing. Attach them when reporting a problem.
 
 ## Credits
 
@@ -157,4 +156,4 @@ The memory card is only read; nothing on it is changed. Snapshots already on the
 - **Shared code:** the music player, DOL loader, updater, secure connection, video and SD card code come from [CubeBrowser](https://github.com/Arial-Bold/Cubebrowser).
 - The menu sounds, the background music and the cube's look are Flashcube's own. Nothing from Nintendo is included.
 
-Designed and art-directed by Arial-Bold. Code written with AI assistance (Claude by Anthropic).
+Flashcube was built with **Claude** (by Anthropic), working with Arial-Bold.
