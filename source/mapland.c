@@ -104,15 +104,23 @@ static bool render(Scratch *k, uint16_t *tex, int tw, int w, int h, float lat_c,
             m[y * w + x] = (lon >= -180 && lon < 180 && map_is_land_smooth(lat, lon)) ? 1 : 0;
         }
     }
+#ifndef STAGE
+#define STAGE(n)
+#endif
+    STAGE("0_raw");
     /* simplify for the screen */
-    moat(k, w, h, lat_c, lon_c, s, 2);
+    moat(k, w, h, lat_c, lon_c, s, 3);
+    STAGE("1_moat");
     morph(k, w, h, 2, true);
     morph(k, w, h, 2, false);            /* inlets and gaps under about 4 pixels close */
-    moat(k, w, h, lat_c, lon_c, s, 3);   /* ...but landmasses stay apart */
+    STAGE("2_closed");
+    moat(k, w, h, lat_c, lon_c, s, 5);   /* ...but landmasses stay apart, far enough for two coastlines */
+    STAGE("3_moat");
     drop_small(k, w, h, 1, 60);          /* islands too small to draw */
     drop_small(k, w, h, 0, 60);          /* lakes too */
     morph(k, w, h, 1, false);
     morph(k, w, h, 1, true);             /* thin spits */
+    STAGE("4_final");
     /* soften: how much of each 3x3 is land (0..9) */
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
