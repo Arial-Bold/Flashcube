@@ -18,6 +18,45 @@ for f in g['features']:
         for hole in poly[1:]:
             d.polygon([px(*p[:2]) for p in hole], fill=0)
 img = img.resize((W, H), Image.BOX)
+
+# Where two separate big pieces of land come within a cell of each other
+# (Greenland and Ellesmere, Spain and Morocco), the cells along the join are
+# listed so the map can keep a line of water between them however far out
+# it is zoomed.
+def area(ring):
+    a = 0
+    for i in range(len(ring)):
+        x1, y1 = ring[i][:2]; x2, y2 = ring[i - 1][:2]
+        a += x1 * y2 - x2 * y1
+    return abs(a) / 2
+ids = Image.new('I', (W, H), 0)
+di = ImageDraw.Draw(ids)
+big = 0
+areas = [0]
+for f in g['features']:
+    geom = f['geometry']
+    polys = geom['coordinates'] if geom['type'] == 'MultiPolygon' else [geom['coordinates']]
+    for poly in polys:
+        if area(poly[0]) < 4: continue      # square degrees: real landmasses only
+        big += 1
+        areas.append(area(poly[0]))
+        di.polygon([((p[0] + 180) * RES, (LAT0 - p[1]) * RES) for p in poly[0]], fill=big)
+idp = ids.load()
+moat = []
+for y in range(H):
+    for x in range(W):
+        a = idp[x, y]
+        if not a: continue
+        hit = False
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                xx, yy = (x + dx) % W, y + dy
+                if 0 <= yy < H:
+                    b = idp[xx, yy]
+                    # (only where one side is a continent-sized piece, so
+                    # island groups may still run together into one shape)
+                    if b and b != a and max(areas[a], areas[b]) > 150: hit = True
+        if hit: moat.append((y, x))
 pix = img.load()
 rowbytes = W // 8
 bits = bytearray(rowbytes * H)
@@ -56,9 +95,13 @@ with open(out_path, 'w') as o:
     o.write('const uint8_t map_land_bits[%d] = {\n' % len(bits))
     for i in range(0, len(bits), 24):
         o.write(''.join('%d,' % b for b in bits[i:i+24]) + '\n')
-    o.write('};\n\nconst char *const map_countries[%d] = {\n' % len(countries))
+    o.write('};\n\n/* cells (row, column) where two landmasses meet: kept as water */\n')
+    o.write('const uint16_t map_moat[%d][2] = {\n' % len(moat))
+    for i in range(0, len(moat), 8):
+        o.write(''.join('{%d,%d},' % m for m in moat[i:i+8]) + '\n')
+    o.write('};\nconst int map_nmoat = %d;\n\nconst char *const map_countries[%d] = {\n' % (len(moat), len(countries)))
     for c in countries: o.write('  "%s",\n' % c)
     o.write('};\n\n/* sorted by latitude */\nconst MapCity map_cities[%d] = {\n' % len(cities))
     for la, lo, pop, name, ci in cities: o.write('  {%d,%d,%d,%d,"%s"},\n' % (la, lo, min(pop//1000, 65535), ci, name))
     o.write('};\n')
-print(W, H, n, len(cities), len(countries), max(len(c[3]) for c in cities), file=sys.stderr)
+print(W, H, n, 'moat', len(moat), 'big', big, len(cities), len(countries), max(len(c[3]) for c in cities), file=sys.stderr)
