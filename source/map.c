@@ -468,29 +468,33 @@ int map_update(void) {
 
 static void well(float x, float y, float w, float h, float al) {
     gfx_rect(x - 2, y - 2, w + 4, h + 4, rgba(190, 200, 215, (u8)(110 * al)));
-    gfx_rect(x, y, w, h, rgba(0x0b, 0x0f, 0x12, (u8)(255 * al)));
+    gfx_rect(x, y, w, h, rgba(0x08, 0x0c, 0x10, (u8)(255 * al)));   /* (the land picture's sea, as the GPU shows it) */
 }
 
 /* The land: a picture of the view drawn by mapland.c, asked for again
  * when the view has moved on (at once when it settles, and now and then
  * while it keeps moving). Meanwhile the last one moves along with it. */
-#define LAND_MARGIN 64
+#define LAND_MARGIN 32
 static float land_asked;
+static float asked_lat = 999, asked_lon, asked_s;
 static void keep_land_fresh(void) {
     float s = px_per_deg(zoom);
     const LandPic *cur = mapland_current();
     land_asked += g_dt;
-    if (mapland_busy()) return;
     int w = (int)WW + LAND_MARGIN * 2, h = (int)WH + LAND_MARGIN * 2;
-    if (cur && cur->w == w && cur->h == h && fabsf(cur->s - s) < s * 0.004f &&
-        fabsf(cur->lon - clon) * s < 1 && fabsf(cur->lat - clat) * s < 1) return;   /* (up to date) */
+    bool fits = cur && cur->w == w && cur->h == h && fabsf(cur->s - s) < s * 0.004f &&
+                fabsf(cur->lon - clon) * s < 1 && fabsf(cur->lat - clat) * s < 1;
+    bool asked = fabsf(asked_s - s) < s * 0.004f && fabsf(asked_lon - clon) * s < 1 && fabsf(asked_lat - clat) * s < 1;
+    if (fits || asked) return;
+    /* a newer request replaces one being drawn, so ask as soon as the view
+     * settles, and every so often while it keeps moving */
     bool settled = fabsf(zoom - zoom_to) < zoom * 0.005f && fabsf(clat - tlat) * s < 0.5f && fabsf(clon - tlon) * s < 0.5f;
-    if (!cur || settled || land_asked > 0.4f) {
+    if (!cur || settled || land_asked > 0.3f) {
         mapland_request(w, h, clat, clon, s);
+        asked_lat = clat; asked_lon = clon; asked_s = s;
         land_asked = 0;
     }
 }
-
 
 static void count_text(int n, char *out, size_t cap) {
     if (n > 999) snprintf(out, cap, "%dk", n / 1000);
@@ -632,7 +636,14 @@ void map_draw(float X, float pa, float da, float ha) {
     well(WX, WY, WW, WH, pa);
     gfx_set_clip(WX, WY, WW, WH);
     keep_land_fresh();
-    mapland_show(mapland_current(), WX, WY, WW, WH, clat, clon, px_per_deg(zoom), pa);
+    /* the whole world underneath (soft when zoomed, but there at once), then the sharp view */
+    float s1 = px_per_deg(1), wlat = 12, wlon = 0;
+    clamp_center(1, &wlat, &wlon);
+    const LandPic *cur = mapland_current();
+    float s = px_per_deg(zoom);
+    const LandPic *wp = mapland_world((int)WW, (int)WH, wlat, wlon, s1);
+    if (s < s1 * 3) mapland_show(wp, WX, WY, WW, WH, clat, clon, s, pa);   /* (stretched further it's only smudges) */
+    mapland_show(cur, WX, WY, WW, WH, clat, clon, s, pa);
     int sp = selected_pin();
     bool photos_on = zoom >= PIN_ZOOM;
     for (int j = 0; j < npins; j++) {

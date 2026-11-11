@@ -29,6 +29,9 @@ void mapland_request(int w, int h, float lat, float lon, float s);
 bool mapland_busy(void);
 /* The newest finished picture of the main map, or NULL. */
 const LandPic *mapland_current(void);
+/* The whole world at zoom 1 (w x h around lat/lon, s pixels a degree),
+ * drawn once in the background; NULL until it's ready. */
+const LandPic *mapland_world(int w, int h, float lat, float lon, float s);
 /* Draws a small view straight away (the place view's little map). */
 bool mapland_draw_now(LandPic *pic, int w, int h, float lat, float lon, float s);
 void mapland_free(LandPic *pic);

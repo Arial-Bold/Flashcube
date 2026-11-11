@@ -16,6 +16,7 @@ typedef struct {
     int *stack;
     int *seen;
     int stamp;
+    bool can_stop;               /* (the thread's: gives up for a newer view) */
 } Scratch;
 
 static bool scratch_fit(Scratch *k, int n) {
@@ -28,25 +29,32 @@ static bool scratch_fit(Scratch *k, int n) {
     return k->cap > 0;
 }
 
-/* Grows (or shrinks) the land by r pixels, round. */
+/* Grows (or shrinks) the land by r pixels (a square, done across and then
+ * down, so it costs the same whatever r is). */
 static void morph(Scratch *k, int w, int h, int r, bool grow) {
-    memcpy(k->tmp, k->mask, (size_t)w * h);
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            int v = k->tmp[y * w + x];
-            if (grow == (v != 0)) continue;
-            for (int dy = -r; dy <= r; dy++) {
-                int yy = y + dy;
-                if (yy < 0 || yy >= h) continue;
-                for (int dx = -r; dx <= r; dx++) {
-                    int xx = x + dx;
-                    if (xx < 0 || xx >= w || dx * dx + dy * dy > r * r + r) continue;
-                    if (k->tmp[yy * w + xx] == grow) { v = grow; goto done; }
-                }
+    uint8_t *m = k->mask, *t = k->tmp;
+    uint8_t want = grow ? 1 : 0;
+    for (int y = 0; y < h; y++) {
+        const uint8_t *row = m + y * w;
+        uint8_t *out = t + y * w;
+        int run = -1000000;                      /* where `want` was last seen */
+        for (int x = 0; x < w + r; x++) {
+            if (x < w && row[x] == want) run = x;
+            int ox = x - r;
+            if (ox >= 0) {
+                /* is `want` within r on either side? (the right side is x) */
+                out[ox] = (x - run <= 2 * r) ? want : (uint8_t)!want;
             }
-        done:
-            k->mask[y * w + x] = (uint8_t)v;
         }
+    }
+    for (int x = 0; x < w; x++) {
+        int run = -1000000;
+        for (int y = 0; y < h + r; y++) {
+            if (y < h && t[y * w + x] == want) run = y;
+            int oy = y - r;
+            if (oy >= 0) m[oy * w + x] = (y - run <= 2 * r) ? want : (uint8_t)!want;
+        }
+    }
 }
 
 /* Turns pieces of land (value 1) or water (0) smaller than min_px into the
@@ -92,17 +100,69 @@ typedef struct { float r, g, b; } RGB;
 static inline RGB mix(RGB a, RGB b, float t) { RGB o = { a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t }; return o; }
 static const RGB SEA = { 0x0b, 0x0f, 0x12 }, LAND = { 0x11, 0x1a, 0x2c }, GLOW = { 0x3a, 0x4c, 0xb0 }, COAST = { 0x9f, 0xb4, 0xff };
 
+/* Every colour a pixel can be: by how much land is around it (0..9), its
+ * glow and its coastline (each in 16 steps). */
+static uint16_t shade[10][16][16];
+static bool shade_made;
+static void make_shades(void) {
+    for (int c = 0; c < 10; c++)
+        for (int g = 0; g < 16; g++)
+            for (int e = 0; e < 16; e++) {
+                RGB o = mix(SEA, LAND, c / 9.0f);
+                o = mix(o, GLOW, g / 15.0f * 0.6f);
+                o = mix(o, COAST, e / 15.0f);
+                shade[c][g][e] = rgb565((int)o.r, (int)o.g, (int)o.b);
+            }
+    shade_made = true;
+}
+
+/* Set when a newer view is wanted: the one being drawn is given up. */
+static volatile bool want;
+#define GIVE_UP() do { if (k->can_stop && want) return false; } while (0)
+
 /* Draws a view into tex (tiled RGB565, tw wide). */
 static bool render(Scratch *k, uint16_t *tex, int tw, int w, int h, float lat_c, float lon_c, float s) {
     if (!scratch_fit(k, w * h)) return false;
+    if (!shade_made) make_shades();
     uint8_t *m = k->mask;
-    /* land or water at each pixel's middle */
+    /* land or water at each pixel's middle: where each column and row falls
+     * among the data's cells, worked out once */
+    int *col = k->stack, *row = k->stack + w;
+    uint8_t *fx = k->edge, *fy = k->edge + w;      /* (borrowed for now) */
+    for (int x = 0; x < w; x++) {
+        float lon = lon_c + (x + 0.5f - w / 2.0f) / s;
+        float c = (lon + 180) * MAP_RES - 0.5f;
+        int c0 = (int)floorf(c);
+        col[x] = (lon < -180 || lon >= 180) ? -1 : c0;
+        fx[x] = (uint8_t)((c - c0) * 255);
+    }
     for (int y = 0; y < h; y++) {
         float lat = lat_c - (y + 0.5f - h / 2.0f) / s;
+        float r = (MAP_LAT_TOP - lat) * MAP_RES - 0.5f;
+        int r0 = (int)floorf(r);
+        row[y] = r0;
+        fy[y] = (uint8_t)((r - r0) * 255);
+    }
+    for (int y = 0; y < h; y++) {
+        int r0 = row[y], ty = fy[y];
+        bool in0 = r0 >= 0 && r0 < MAP_ROWS, in1 = r0 + 1 >= 0 && r0 + 1 < MAP_ROWS;
+        const uint8_t *b0 = map_land_bits + (in0 ? r0 : 0) * (MAP_COLS / 8), *b1 = map_land_bits + (in1 ? r0 + 1 : 0) * (MAP_COLS / 8);
         for (int x = 0; x < w; x++) {
-            float lon = lon_c + (x + 0.5f - w / 2.0f) / s;
-            m[y * w + x] = (lon >= -180 && lon < 180 && map_is_land_smooth(lat, lon)) ? 1 : 0;
+            int c0 = col[x];
+            if (c0 < -1 || (!in0 && !in1)) { m[y * w + x] = 0; continue; }
+            int c1 = c0 + 1;
+            c0 = (c0 + MAP_COLS) % MAP_COLS;
+            c1 = c1 % MAP_COLS;
+            int tx = fx[x];
+            /* the four cells around, weighted by nearness (out of 255*255) */
+            int v = 0;
+            if (in0 && (b0[c0 >> 3] & (0x80 >> (c0 & 7)))) v += (255 - ty) * (255 - tx);
+            if (in0 && (b0[c1 >> 3] & (0x80 >> (c1 & 7)))) v += (255 - ty) * tx;
+            if (in1 && (b1[c0 >> 3] & (0x80 >> (c0 & 7)))) v += ty * (255 - tx);
+            if (in1 && (b1[c1 >> 3] & (0x80 >> (c1 & 7)))) v += ty * tx;
+            m[y * w + x] = v >= 255 * 255 / 2;
         }
+        if ((y & 31) == 0) GIVE_UP();
     }
 #ifndef STAGE
 #define STAGE(n)
@@ -110,45 +170,41 @@ static bool render(Scratch *k, uint16_t *tex, int tw, int w, int h, float lat_c,
     STAGE("0_raw");
     /* simplify for the screen */
     moat(k, w, h, lat_c, lon_c, s, 3);
-    STAGE("1_moat");
     morph(k, w, h, 2, true);
     morph(k, w, h, 2, false);            /* inlets and gaps under about 4 pixels close */
-    STAGE("2_closed");
     moat(k, w, h, lat_c, lon_c, s, 5);   /* ...but landmasses stay apart, far enough for two coastlines */
-    STAGE("3_moat");
+    STAGE("2_closed");
+    GIVE_UP();
     drop_small(k, w, h, 1, 60);          /* islands too small to draw */
     drop_small(k, w, h, 0, 60);          /* lakes too */
     morph(k, w, h, 1, false);
     morph(k, w, h, 1, true);             /* thin spits */
     STAGE("4_final");
-    /* soften: how much of each 3x3 is land (0..9) */
+    GIVE_UP();
+    /* soften: how much of each 3x3 is land (0..9), across then down */
+    uint8_t *cn = k->cnt, *t = k->tmp, *e = k->edge;
+    for (int y = 0; y < h; y++) {
+        const uint8_t *r = m + y * w;
+        /* (past the picture's edge counts as more of the same, so land
+         * running off the edge gets no coastline there) */
+        for (int x = 0; x < w; x++) t[y * w + x] = (uint8_t)(r[x] + r[x > 0 ? x - 1 : x] + r[x < w - 1 ? x + 1 : x]);
+    }
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            cn[y * w + x] = (uint8_t)(t[y * w + x] + t[(y > 0 ? y - 1 : y) * w + x] + t[(y < h - 1 ? y + 1 : y) * w + x]);
+    /* the coastline: where that changes (0..15) */
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
-            int c = 0;
-            for (int dy = -1; dy <= 1; dy++) {
-                int yy = y + dy;
-                if (yy < 0 || yy >= h) continue;
-                for (int dx = -1; dx <= 1; dx++) {
-                    int xx = x + dx;
-                    if (xx >= 0 && xx < w) c += m[yy * w + xx];
-                }
-            }
-            k->cnt[y * w + x] = (uint8_t)c;
+            int i = y * w + x, c = cn[i], d = 0, q;
+            if (x > 0 && (q = abs(c - cn[i - 1])) > d) d = q;
+            if (x < w - 1 && (q = abs(c - cn[i + 1])) > d) d = q;
+            if (y > 0 && (q = abs(c - cn[i - w])) > d) d = q;
+            if (y < h - 1 && (q = abs(c - cn[i + w])) > d) d = q;
+            int v = d * 15 * 22 / 90;
+            e[i] = (uint8_t)(v > 15 ? 15 : v);
         }
-    /* the coastline: where that changes */
-    uint8_t *cn = k->cnt, *e = k->edge;
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++) {
-            int c = cn[y * w + x], d = 0;
-            if (x > 0) d = abs(c - cn[y * w + x - 1]) > d ? abs(c - cn[y * w + x - 1]) : d;
-            if (x < w - 1) d = abs(c - cn[y * w + x + 1]) > d ? abs(c - cn[y * w + x + 1]) : d;
-            if (y > 0) d = abs(c - cn[(y - 1) * w + x]) > d ? abs(c - cn[(y - 1) * w + x]) : d;
-            if (y < h - 1) d = abs(c - cn[(y + 1) * w + x]) > d ? abs(c - cn[(y + 1) * w + x]) : d;
-            int v = d * 255 * 22 / 90;
-            e[y * w + x] = (uint8_t)(v > 255 ? 255 : v);
-        }
+    GIVE_UP();
     /* its glow: the coastline spread 3 pixels, fading (across, then down) */
-    uint8_t *g = k->tmp;
     for (int y = 0; y < h; y++)
         for (int x = 0; x < w; x++) {
             int best = 0;
@@ -158,22 +214,22 @@ static bool render(Scratch *k, uint16_t *tex, int tw, int w, int h, float lat_c,
                 int v = e[y * w + xx] * (4 - abs(dx)) / 4;
                 if (v > best) best = v;
             }
-            g[y * w + x] = (uint8_t)best;
+            t[y * w + x] = (uint8_t)best;
         }
-    for (int y = 0; y < h; y++)
+    for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int best = 0;
             for (int dy = -3; dy <= 3; dy++) {
                 int yy = y + dy;
                 if (yy < 0 || yy >= h) continue;
-                int v = g[yy * w + x] * (4 - abs(dy)) / 4;
+                int v = t[yy * w + x] * (4 - abs(dy)) / 4;
                 if (v > best) best = v;
             }
-            RGB o = mix(SEA, LAND, cn[y * w + x] / 9.0f);
-            o = mix(o, GLOW, best / 255.0f * 0.6f);
-            o = mix(o, COAST, e[y * w + x] / 255.0f);
-            tex[tex_index(tw, x, y)] = rgb565((int)o.r, (int)o.g, (int)o.b);
+            int i = y * w + x;
+            tex[tex_index(tw, x, y)] = shade[cn[i]][best][e[i]];
         }
+        if ((y & 31) == 0) GIVE_UP();
+    }
     return true;
 }
 
@@ -185,9 +241,38 @@ static LandPic pics[2];          /* the one shown, and the next one being drawn 
 static uint16_t *bufs[2];
 static int buf_cap[2];
 static int front = -1;           /* which of pics[] is shown */
-static volatile bool want, busy;
+static volatile bool busy;
 static struct { int w, h; float lat, lon, s; } req;
-static Scratch scratch;
+static Scratch scratch = { .can_stop = true };
+
+/* The whole world, drawn once: shown under the current view so zooming
+ * out never shows empty sea while the sharp picture is being drawn. */
+static LandPic world;
+static uint16_t *world_buf;
+static volatile bool world_want, world_done;
+static struct { int w, h; float lat, lon, s; } world_req;
+
+static void draw_world(void) {
+    int w = world_req.w, h = world_req.h;
+    int tw = tex_round(w), th = tex_round(h);
+    uint16_t *t = memalign(32, (size_t)tw * th * 2);
+    if (!t) return;
+    memset(t, 0, (size_t)tw * th * 2);
+    scratch.can_stop = false;
+    bool ok = render(&scratch, t, tw, w, h, world_req.lat, world_req.lon, world_req.s);
+    scratch.can_stop = true;
+    thr_lock(&lock);
+    if (ok) {
+        world_buf = t;
+        world.w = w; world.h = h; world.lat = world_req.lat; world.lon = world_req.lon; world.s = world_req.s;
+        world.img.data = NULL;
+        world.ready = true;
+        world_done = true;
+    } else {
+        free(t);
+    }
+    thr_unlock(&lock);
+}
 
 static void *worker_main(void *arg) {
     (void)arg;
@@ -199,7 +284,11 @@ static void *worker_main(void *arg) {
         int back = front == 0 ? 1 : 0;
         if (go) { want = false; busy = true; }
         thr_unlock(&lock);
-        if (!go) { thr_sleep_ms(8); continue; }
+        if (!go) {
+            if (world_want && !world_done) { world_want = false; draw_world(); continue; }
+            thr_sleep_ms(8);
+            continue;
+        }
         int tw = tex_round(w), th = tex_round(h);
         if (buf_cap[back] < tw * th) {
             free(bufs[back]);
@@ -225,7 +314,9 @@ static void *worker_main(void *arg) {
 
 void mapland_init(void) {
     thr_mutex_init(&lock);
-    thr_create(&worker, worker_main, NULL, 64 * 1024, 30);   /* (below the photo thread) */
+    /* (above the photo thread, so the map isn't kept waiting while
+     * thumbnails load, and below the main thread) */
+    thr_create(&worker, worker_main, NULL, 64 * 1024, 45);
 }
 
 void mapland_request(int w, int h, float lat, float lon, float s) {
@@ -249,6 +340,32 @@ const LandPic *mapland_current(void) {
     }
     thr_unlock(&lock);
     return p;
+}
+
+const LandPic *mapland_world(int w, int h, float lat, float lon, float s) {
+    thr_lock(&lock);
+    if (world_done && (world.w != w || world.h != h || world.s != s)) {
+        /* (the screen changed shape: draw it again) */
+        if (world.img.data) { gfx_image_free(&world.img); world_buf = NULL; }
+        else free(world_buf);
+        world_buf = NULL;
+        memset(&world, 0, sizeof(world));
+        world_done = false;
+    }
+    if (!world_done) {
+        world_req.w = w; world_req.h = h; world_req.lat = lat; world_req.lon = lon; world_req.s = s;
+        world_want = true;
+        thr_unlock(&lock);
+        return NULL;
+    }
+    if (!world.img.data && world_buf) {
+        int tw = tex_round(w), th = tex_round(h);
+        GfxImage im;
+        if (gfx_image_init(&im, world_buf, w, h, tw, th, GFX_RGB565)) world.img = im;
+        else { world_buf = NULL; world.ready = false; }
+    }
+    thr_unlock(&lock);
+    return world.ready && world.img.data ? &world : NULL;
 }
 
 bool mapland_draw_now(LandPic *pic, int w, int h, float lat, float lon, float s) {
