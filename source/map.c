@@ -476,22 +476,24 @@ static void well(float x, float y, float w, float h, float al) {
  * while it keeps moving). Meanwhile the last one moves along with it. */
 #define LAND_MARGIN 32
 static float land_asked;
-static float asked_lat = 999, asked_lon, asked_s;
+static float asked_lat = 999, asked_lon, asked_s, asked_grid;
 static void keep_land_fresh(void) {
     float s = px_per_deg(zoom);
     const LandPic *cur = mapland_current();
     land_asked += g_dt;
     int w = (int)WW + LAND_MARGIN * 2, h = (int)WH + LAND_MARGIN * 2;
-    bool fits = cur && cur->w == w && cur->h == h && fabsf(cur->s - s) < s * 0.004f &&
+    /* the grid fades in as the pins turn into photos */
+    float grid = clamp01((zoom - PIN_ZOOM) / (PIN_ZOOM * 0.5f));
+    bool fits = cur && cur->w == w && cur->h == h && fabsf(cur->s - s) < s * 0.004f && fabsf(cur->grid - grid) < 0.1f &&
                 fabsf(cur->lon - clon) * s < 1 && fabsf(cur->lat - clat) * s < 1;
-    bool asked = fabsf(asked_s - s) < s * 0.004f && fabsf(asked_lon - clon) * s < 1 && fabsf(asked_lat - clat) * s < 1;
+    bool asked = fabsf(asked_s - s) < s * 0.004f && fabsf(asked_grid - grid) < 0.1f && fabsf(asked_lon - clon) * s < 1 && fabsf(asked_lat - clat) * s < 1;
     if (fits || asked) return;
     /* a newer request replaces one being drawn, so ask as soon as the view
      * settles, and every so often while it keeps moving */
     bool settled = fabsf(zoom - zoom_to) < zoom * 0.005f && fabsf(clat - tlat) * s < 0.5f && fabsf(clon - tlon) * s < 0.5f;
     if (!cur || settled || land_asked > 0.3f) {
-        mapland_request(w, h, clat, clon, s);
-        asked_lat = clat; asked_lon = clon; asked_s = s;
+        mapland_request(w, h, clat, clon, s, grid);
+        asked_lat = clat; asked_lon = clon; asked_s = s; asked_grid = grid;
         land_asked = 0;
     }
 }
@@ -578,16 +580,17 @@ static void draw_place(float X, float pa, float da, float ha) {
         if (folder < 0) folder = p->folder;
         else if (p->folder != folder) one_folder = false;
     }
-    char taken[48], from[48], where[48];
+    char taken[48], from[48], where[64];
     span_text(t0, t1, true, taken, sizeof(taken));
     const Folder *f = folder >= 0 ? photos_folder(folder) : NULL;
     snprintf(from, sizeof(from), "%s", !f ? "" : one_folder ? f->name : "Several folders");
-    geo_format_coords(place_lat, place_lon, where, sizeof(where));
+    /* (the same naming as the photo's Information) */
+    geo_place_name(place_lat, place_lon, where, sizeof(where));
     const char *lab[] = { "Taken", "From", "Place" };
     const char *val[] = { taken, from, where };
     for (int i = 0; i < 3; i++) {
         ui_text(FONT_MENU, 12, 1.2f, X + 41, 186 + i * 40, 18, color_alpha(LABEL, pa), lab[i]);
-        ui_text(FONT_MENU, 13, 1.2f, X + 41, 204 + i * 40, 18, color_alpha(TEXT, pa), val[i]);
+        ui_text_fit_scroll(FONT_MENU, 13, 1.2f, X + 41, 204 + i * 40, 166, 18, color_alpha(TEXT, pa), val[i]);
     }
 
     /* its photos */

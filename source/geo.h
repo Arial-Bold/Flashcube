@@ -27,9 +27,8 @@ bool geo_work(void);
 /* (photo thread) Records what pic_info() found for a photo it read anyway. */
 void geo_note(uint32_t key, const PicInfo *info);
 
-/* A name for a place: "Lisbon, Portugal", the nearest city within reach,
- * else the coordinates "38.72 N, 9.14 W". */
+/* A name for a place: "Lisbon, Portugal" (the nearest city within reach),
+ * "Near Reykjavik, Iceland" further out, or "Far from any city". */
 void geo_place_name(float lat, float lon, char *out, size_t cap);
 /* Just the country of the nearest city ("" if none is near). */
 const char *geo_country(float lat, float lon);
-void geo_format_coords(float lat, float lon, char *out, size_t cap);

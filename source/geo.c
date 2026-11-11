@@ -219,27 +219,25 @@ static float km_between(float la1, float lo1, float la2, float lo2) {
     return sqrtf(x * x + y * y) * 111.2f;
 }
 
-/* The nearest city within reach (bigger cities reach further). */
-static const MapCity *nearest_city(float lat, float lon) {
+/* The nearest city within reach (bigger cities reach further), or with
+ * any_distance, simply the nearest within about 1000 km. */
+static const MapCity *city_near(float lat, float lon, bool any_distance) {
     const MapCity *best = NULL;
-    float best_score = 1e9f;
+    float best_score = 1e9f, span = any_distance ? 9.0f : 2.5f;
     int lo = 0, hi = MAP_NCITIES;
-    int ilat = (int)((lat - 2.5f) * 100);
+    int ilat = (int)((lat - span) * 100);
     while (lo < hi) { int mid = (lo + hi) / 2; if (map_cities[mid].lat < ilat) lo = mid + 1; else hi = mid; }
-    for (int i = lo; i < MAP_NCITIES && map_cities[i].lat <= (int)((lat + 2.5f) * 100); i++) {
+    for (int i = lo; i < MAP_NCITIES && map_cities[i].lat <= (int)((lat + span) * 100); i++) {
         const MapCity *c = &map_cities[i];
         float d = km_between(lat, lon, c->lat / 100.0f, c->lon / 100.0f);
-        float reach = 60.0f + 25.0f * log10f(1.0f + c->pop_k);   /* 60 km to about 160 km */
+        float reach = any_distance ? 1000.0f : 60.0f + 25.0f * log10f(1.0f + c->pop_k);   /* 60 km to about 160 km */
         if (d > reach) continue;
         float score = d / reach;
         if (score < best_score) { best_score = score; best = c; }
     }
     return best;
 }
-
-void geo_format_coords(float lat, float lon, char *out, size_t cap) {
-    snprintf(out, cap, "%.2f %c, %.2f %c", fabsf(lat), lat >= 0 ? 'N' : 'S', fabsf(lon), lon >= 0 ? 'E' : 'W');
-}
+static const MapCity *nearest_city(float lat, float lon) { return city_near(lat, lon, false); }
 
 void geo_place_name(float lat, float lon, char *out, size_t cap) {
     const MapCity *c = nearest_city(lat, lon);
@@ -247,8 +245,13 @@ void geo_place_name(float lat, float lon, char *out, size_t cap) {
         const char *country = map_countries[c->country];
         if (country[0] && strcmp(country, c->name)) snprintf(out, cap, "%s, %s", c->name, country);
         else snprintf(out, cap, "%s", c->name);
+    } else if ((c = city_near(lat, lon, true)) != NULL) {
+        /* out in the country (or at sea): the nearest city, a way off */
+        const char *country = map_countries[c->country];
+        if (country[0] && strcmp(country, c->name)) snprintf(out, cap, "Near %s, %s", c->name, country);
+        else snprintf(out, cap, "Near %s", c->name);
     } else {
-        geo_format_coords(lat, lon, out, cap);
+        snprintf(out, cap, "Far from any city");
     }
 }
 

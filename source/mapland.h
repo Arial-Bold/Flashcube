@@ -18,14 +18,16 @@
 typedef struct {
     int w, h;                    /* size in pixels */
     float lat, lon, s;           /* what's in it: the middle, and pixels per degree */
+    float grid;                  /* how strong its grid of latitude and longitude is (0..1) */
     GfxImage img;
     bool ready;
 } LandPic;
 
 void mapland_init(void);
-/* Asks for a view w x h pixels around lat/lon at s pixels per degree (the
- * main map: one at a time, the newest wins). */
-void mapland_request(int w, int h, float lat, float lon, float s);
+/* Asks for a view w x h pixels around lat/lon at s pixels per degree, with
+ * a faint grid of latitude and longitude on the land at strength grid
+ * (0..1) (the main map: one at a time, the newest wins). */
+void mapland_request(int w, int h, float lat, float lon, float s, float grid);
 bool mapland_busy(void);
 /* The newest finished picture of the main map, or NULL. */
 const LandPic *mapland_current(void);

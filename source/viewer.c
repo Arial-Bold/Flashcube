@@ -334,13 +334,7 @@ static void viewer_draw(float open) {
          * often take the place out of photos they share or send) */
         if (req.state != 2) snprintf(v[6], 160, "-");
         else if (!req.pic.info.has_gps) snprintf(v[6], 160, "Not saved in this photo");
-        else {
-            char name[64], at[40];
-            geo_place_name(req.pic.info.lat, req.pic.info.lon, name, sizeof(name));
-            geo_format_coords(req.pic.info.lat, req.pic.info.lon, at, sizeof(at));
-            if (strcmp(name, at)) snprintf(v[6], 160, "%s (%s)", name, at);
-            else snprintf(v[6], 160, "%s", at);
-        }
+        else geo_place_name(req.pic.info.lat, req.pic.info.lon, v[6], 160);
         static const char *lab[7] = { "Name", "Taken", "Camera", "Size", "File", "Folder", "Place" };
         for (int i = 0; i < 7; i++) {
             float y = iy + 40 + i * 25;
