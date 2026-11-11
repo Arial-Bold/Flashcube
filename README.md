@@ -14,7 +14,7 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 ### Album
 - All your photos as a grid of thumbnails, with tabs for **All**, each **year**, **Folders**, **Favorites** and **Map**.
 - Thumbnails appear quickly, even for big photos, and are remembered so each photo is only read once.
-- **Map:** photos on a map of the world by where they were taken (phones save the place with each photo when the camera may use location). Gold pins show how many photos are in each spot; zoom in with the C-stick or A and the pins split apart and show a photo. A on a place shows its photos, with a small map, when they were taken and the town or city nearby. Y starts a slideshow of a pin's photos.
+- **Map:** photos on a map of the world by where they were taken (phones save the place with each photo when the camera may use location; see [Using Transfer](#using-transfer) for photos sent from a phone). Gold pins show how many photos are in each spot; zoom in with the C-stick or A and the pins split apart and show a photo. A on a place shows its photos, with a small map, when they were taken and the town or city nearby. Y starts a slideshow of a pin's photos.
 
 ### Photo viewer
 - Each photo sits in a frame shaped like the photo, with a film strip of the photos either side.
@@ -124,6 +124,7 @@ JPEG, PNG, BMP and GIF photos are shown.
 3. Once the screen says *Ready*, scan the QR code with your phone's camera. The phone must be on the same network.
 
 - **Sending photos:** photos you send appear in the album at once and are stored in `DCIM/100FLASH`. iPhones turn their photos into JPEGs as they send them.
+- **Location and the Map:** photos sent from the Transfer page may arrive without the place they were taken, so they won't appear on the Map. Flashcube keeps every photo exactly as it's sent, but iOS and Android take the location out of photos chosen in a web page, for privacy. To keep it, copy the photos onto the SD card with a card reader or USB cable. On a phone, picking the photo from the Files app (iPhone: in Photos, Share, Options, turn on Location, then Save to Files) instead of the photo library may also keep it, depending on the phone.
 - **Saving photos:** tap a photo on the page, then press and hold it to save it to your phone, or tick several and use **Save**.
 - **Fixed address:** to use one instead of DHCP, set `net.dhcp=0`, `net.ip`, `net.netmask` and `net.gateway` in `sd:/apps/flashcube/settings.ini`.
 
