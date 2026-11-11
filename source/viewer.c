@@ -182,15 +182,17 @@ static void viewer_update(void) {
         case ROW_DELETE: confirm = true; confirm_btn = 1; confirm_t = 0; break;
         }
     }
-    /* zoom: R closer, L further (analogue or click) */
+    /* zoom: C-stick up closer, down further (R and L still work too) */
     float zr = input_trigger_r() + (input_held(BTN_R) ? 1 : 0), zl = input_trigger_l() + (input_held(BTN_L) ? 1 : 0);
+    if (input_cstick_y() < -0.2f) zr += -input_cstick_y();
+    if (input_cstick_y() > 0.2f) zl += input_cstick_y();
     if (zr > 0.1f) zoom_target *= 1 + g_dt * 1.6f * fminf(zr, 1);
     if (zl > 0.1f) zoom_target /= 1 + g_dt * 1.6f * fminf(zl, 1);
     if (zoom_target < 1) zoom_target = 1;
     if (zoom_target > 4) zoom_target = 4;
     zoom += (zoom_target - zoom) * clamp01(g_dt * 10);
-    /* move around (stick or C-stick) */
-    float mx = input_stick_x() + input_cstick_x(), my = input_stick_y() + input_cstick_y();
+    /* move around with the stick (the C-stick zooms) */
+    float mx = input_stick_x(), my = input_stick_y();
     if (zoom > 1.01f) {
         pan_x += mx * g_dt * 0.6f / zoom;
         pan_y += my * g_dt * 0.6f / zoom;
@@ -259,7 +261,7 @@ static void viewer_draw(float open) {
 
     /* the photo menu */
     if (ua > 0) {
-        ui_panel(X + 20, 18, 120, 268, ua);
+        ui_panel(X + 20, 18, 120, 38 + NROWS * 29 + 6, ua);   /* just tall enough for its rows */
         ui_ptitle(X + 20, 18, 120, "Photo", NULL, ua);
         Photo *p = current();
         for (int i = 0; i < NROWS; i++) {
@@ -305,8 +307,7 @@ static void viewer_draw(float open) {
     if (ua > 0 && p) {
         ui_desc(X + 20, 376, UI_W - 40, 34, ua);
         char left[96], right[96], date[24];
-        if (zoom > 1.01f) snprintf(left, sizeof(left), "%s \x7f Zoom %d%%", p->name, (int)(zoom * 100 + 0.5f));
-        else snprintf(left, sizeof(left), "%s", p->name);
+        snprintf(left, sizeof(left), "%s", p->name);   /* (the zoom shows in the menu) */
         photos_format_date(p, date, sizeof(date));
         if (p->w) snprintf(right, sizeof(right), "%s \x7f %d \x80 %d \x7f %d of %d", date, p->w, p->h, g_view_pos + 1, g_view_count);
         else snprintf(right, sizeof(right), "%s \x7f %d of %d", date, g_view_pos + 1, g_view_count);
@@ -357,7 +358,7 @@ static void viewer_draw(float open) {
         ui_hints(ch, 3, a, input_stick_dir());
         return;
     }
-    const char *h[] = { "S:Move", "LR:Zoom", "DP:Next", "B:Back", "A:Confirm" };
+    const char *h[] = { "S:Move", "C:Zoom", "DP:Next", "B:Back", "A:Open" };
     ui_hints(h, 5, ua, input_stick_dir());
 }
 

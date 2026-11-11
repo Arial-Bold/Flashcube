@@ -260,7 +260,7 @@ static void album_draw(float open) {
             if (y > 60 && y < 370) {
                 float pop = 1 + 0.06f * (1 - clamp01(sel_flash / 0.18f));
                 float pw = CW * pop, ph = CH * pop;
-                ui_gold_ring(x - (pw - CW) / 2, y - (ph - CH) / 2, pw, ph, 0.5f + 0.5f * sinf(g_time * 4), ra);
+                ui_gold_frame(x - (pw - CW) / 2, y - (ph - CH) / 2, pw, ph, ra);   /* (no glow: it ran into the tiles around it) */
             }
         }
         /* prefetch the next page */
@@ -299,7 +299,7 @@ static void album_draw(float open) {
         const char *h[] = { "S:Select", "LR:Tab", "B:Back", "A:Choose" };
         ui_hints(h, 4, ha, input_stick_dir());
     } else {
-        const char *h[] = { "S:Select", "LR:Tab", "Y:Slideshow", "B:Back", "A:Confirm" };
+        const char *h[] = { "S:Select", "LR:Tab", "Y:Slideshow", "B:Back", "A:Open" };
         ui_hints(h, 5, ha, input_stick_dir());
     }
 }

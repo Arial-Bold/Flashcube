@@ -44,9 +44,10 @@ void ui_desc(float x, float y, float w, float h, float alpha);
 void ui_desc_texts(float x, float y, float w, float h, const char *left, const char *right, float alpha);
 void ui_thumb_frame(float x, float y, float w, float h, float alpha);
 void ui_gold_ring(float x, float y, float w, float h, float pulse, float alpha);
+void ui_gold_frame(float x, float y, float w, float h, float alpha);   /* the same, without the glow */
 
 /* Controller hints. A hint is "S:Select", "LR:Tab", "Y:Slideshow", "B:Back",
- * "A:Confirm", "DP:Next" (D-pad), "Z:..." etc. The stick icon's knob moves in
+ * "A:Confirm", "DP:Next" (D-pad), "C:Zoom" (the yellow C-stick), "Z:..." etc. The stick icon's knob moves in
  * the direction given (DIR_* or -1, from input). */
 void ui_hints(const char *const *hints, int n, float alpha, int stick_dir);
 #define UI_HINT_Y (480 - 30)   /* the centre line of the hints, clear of the panels */
