@@ -8,8 +8,9 @@
 static uint32_t held, prev, pressed_now, injected;
 #ifndef GEKKO
 static uint32_t test_held;
-static float test_sx, test_sy, test_tl, test_tr;
+static float test_sx, test_sy, test_tl, test_tr, test_cx, test_cy;
 void input_test_state(uint32_t h, float x, float y, float l, float r) { test_held = h; test_sx = x; test_sy = y; test_tl = l; test_tr = r; }
+void input_test_cstick(float x, float y) { test_cx = x; test_cy = y; }
 #endif
 static float sx, sy, cx, cy, tl, tr;
 static int repeat_frames[16];
@@ -53,7 +54,7 @@ void input_update(void) {
         if (r > tr) tr = r > 1 ? 1 : r;
     }
 #else
-    held = test_held; sx = test_sx; sy = test_sy; tl = test_tl; tr = test_tr;
+    held = test_held; sx = test_sx; sy = test_sy; tl = test_tl; tr = test_tr; cx = test_cx; cy = test_cy;
 #endif
     pressed_now = (held & ~prev) | injected;
     injected = 0;
@@ -91,6 +92,13 @@ int input_stick_dir(void) {
     if (ax < 0.45f && ay < 0.45f) return DIR_NONE;
     if (ax > ay) return sx > 0 ? DIR_RIGHT : DIR_LEFT;
     return sy > 0 ? DIR_DOWN : DIR_UP;
+}
+
+int input_cstick_dir(void) {
+    float ax = fabsf(cx), ay = fabsf(cy);
+    if (ax < 0.45f && ay < 0.45f) return DIR_NONE;
+    if (ax > ay) return cx > 0 ? DIR_RIGHT : DIR_LEFT;
+    return cy > 0 ? DIR_DOWN : DIR_UP;
 }
 
 int input_dir(void) {

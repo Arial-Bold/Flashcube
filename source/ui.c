@@ -299,17 +299,23 @@ static void stick_icon(float x, float cy, float d, float al, int dir) {
 }
 
 /* the C-stick: yellow, like the controller's */
-static void cstick_icon(float x, float cy, float d, float al) {
+static void cstick_icon(float x, float cy, float d, float al, int dir) {
     float r = d / 2, cx = x + r;
     gfx_circle(cx, cy + 1, r + 1, rgba(0, 0, 0, (u8)(0.6f * 255 * al)));
     gfx_circle(cx, cy, r, rgba(0x6a, 0x5a, 0x10, (u8)(255 * al)));
     gfx_circle(cx, cy, r * 0.78f, rgba(0x2a, 0x24, 0x08, (u8)(255 * al)));
     gfx_ring(cx, cy, r, 1.5f, 0, 2 * (float)M_PI, rgba(255, 240, 160, (u8)(0.28f * 255 * al)));
+    /* the knob leans the way the C-stick is pushed, like the stick's */
+    float nx = cx, ny = cy, off = d * 0.16f;
+    if (dir == DIR_UP) ny -= off;
+    else if (dir == DIR_DOWN) ny += off;
+    else if (dir == DIR_LEFT) nx -= off;
+    else if (dir == DIR_RIGHT) nx += off;
     float nr = d * 0.28f;
-    gfx_circle(cx, cy + 1, nr, rgba(0, 0, 0, (u8)(0.5f * 255 * al)));
+    gfx_circle(nx, ny + 1, nr, rgba(0, 0, 0, (u8)(0.5f * 255 * al)));
     for (int i = 3; i >= 0; i--) {
         float rr = nr * (i + 1) / 4.0f;
-        gfx_circle(cx, cy, rr, (i & 1) ? rgba(0xd1, 0xad, 0x2a, (u8)(255 * al)) : rgba(0xf6, 0xd8, 0x52, (u8)(255 * al)));
+        gfx_circle(nx, ny, rr, (i & 1) ? rgba(0xd1, 0xad, 0x2a, (u8)(255 * al)) : rgba(0xf6, 0xd8, 0x52, (u8)(255 * al)));
     }
 }
 
@@ -332,7 +338,7 @@ static float hint_draw(const char *hint, float x, float cy, float al, int stick_
         if (draw) stick_icon(x, cy, d, al, stick_dir);
         w = d;
     } else if (!strcmp(key, "C")) {
-        if (draw) cstick_icon(x, cy, d, al);
+        if (draw) cstick_icon(x, cy, d, al, input_cstick_dir());
         w = d;
     } else if (key[0]) {
         const char *text = key;

@@ -27,6 +27,7 @@ bool  input_held(uint32_t btn);
 bool  input_repeat(uint32_t btn);      /* pressed, or held long enough to repeat */
 int   input_dir(void);                 /* stick or D-pad: DIR_* when pushed (with repeat) */
 int   input_stick_dir(void);           /* where the stick is held now (no repeat), or DIR_NONE */
+int   input_cstick_dir(void);          /* the same for the C-stick */
 float input_stick_x(void);             /* -1..1 with dead zone */
 float input_stick_y(void);             /* -1..1, up is negative */
 float input_cstick_x(void);
@@ -36,3 +37,4 @@ float input_trigger_r(void);
 bool  input_any(void);                 /* anything pressed this frame */
 void  input_inject(uint32_t pressed);  /* test programs: pretend buttons went down */
 void  input_test_state(uint32_t held, float sx, float sy, float l, float r);   /* test programs only */
+void  input_test_cstick(float x, float y);                                    /* (test programs only) */
