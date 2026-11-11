@@ -9,6 +9,7 @@
 #include "storage.h"
 #include "diag.h"
 #include "photos.h"
+#include "geo.h"
 #include "sound.h"
 #include "midi.h"
 #include "menumusic.h"
@@ -204,6 +205,7 @@ void app_init(void) {
     sound_init();          /* also starts audio memory (ARAM) */
     midi_init();
     menumusic_init();
+    geo_init();            /* before the photo thread, which tells it places */
     photos_init();
     photos_on_insert = photo_inserted;
     if (!sd) app_log("no SD card");
@@ -234,6 +236,7 @@ void app_frame(void) {
     input_update();
     diag_note(DIAG_MAIN, "photos (loading and thumbnails)");
     photos_tick();
+    geo_tick();
     diag_note(DIAG_MAIN, "network (Transfer)");
     net_tick();
     menumusic_update();

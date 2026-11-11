@@ -2,6 +2,7 @@
  * Favorites). Also used to pick a photo for a Playtime game. */
 #include "app.h"
 #include "photos.h"
+#include "map.h"
 #include "ui.h"
 #include "input.h"
 #include "sound.h"
@@ -18,7 +19,7 @@ static int COLS = 4;          /* 5 across in 16:9 */
 #define GX 14.0f
 #define GY 12.0f
 
-enum { TAB_ALL, TAB_YEAR1, TAB_YEAR2, TAB_YEAR3, TAB_FOLDERS, TAB_FAVS };
+enum { TAB_ALL, TAB_YEAR1, TAB_YEAR2, TAB_YEAR3, TAB_FOLDERS, TAB_FAVS, TAB_MAP };
 static int tabs[8], ntabs, tab_years[3], tab = 0;
 static int folder_open = -1;          /* in the Folders tab: the folder being looked at, or -1 */
 static int folder_sel;
@@ -31,6 +32,7 @@ static const char *tab_name(int t, char *buf, size_t cap) {
     case TAB_ALL: return "All";
     case TAB_FOLDERS: return "Folders";
     case TAB_FAVS: return "Favorites";
+    case TAB_MAP: return "Map";
     default: snprintf(buf, cap, "%d", tab_years[t - TAB_YEAR1]); return buf;
     }
 }
@@ -43,6 +45,7 @@ static void build_tabs(void) {
     for (int i = 0; i < ny && i < 3; i++) { tab_years[i] = years[i]; tabs[ntabs++] = TAB_YEAR1 + i; }
     if (photos_folder_count() > 1) tabs[ntabs++] = TAB_FOLDERS;
     tabs[ntabs++] = TAB_FAVS;
+    if (!g_pick_for) tabs[ntabs++] = TAB_MAP;
 }
 
 static int tab_index(int t) {
@@ -54,6 +57,10 @@ static int tab_index(int t) {
 static void build_view(void) {
     int keep = (g_view_pos >= 0 && g_view_pos < g_view_count) ? g_view[g_view_pos] : -1;
     switch (tab) {
+    case TAB_MAP:
+        map_tab_enter();   /* (the photos of the place being looked at, if any) */
+        built_for_count = photos_count();
+        return;
     case TAB_FOLDERS:
         if (folder_open >= 0) {
             g_view_count = photos_view(VIEW_FOLDER, folder_open, g_view, VIEW_MAX);
@@ -106,6 +113,7 @@ static void album_enter(int arg) {
     set_cols();
     build_tabs();
     if (tab >= TAB_YEAR1 && tab <= TAB_YEAR3 && tab_index(tab) == 0) tab = TAB_ALL;
+    if (tab == TAB_MAP && g_pick_for) tab = TAB_ALL;
     build_view();
     keep_visible();
     scroll = scroll_target;
@@ -115,8 +123,28 @@ static void album_enter(int arg) {
 static void album_update(void) {
     set_cols();
     if (photos_scanning()) return;
-    if (built_for_count != photos_count()) { build_tabs(); build_view(); }
+    if (built_for_count != photos_count() && !(tab == TAB_MAP && map_in_place())) { build_tabs(); build_view(); }
     sel_flash += g_dt;
+    if (tab == TAB_MAP) {
+        if (!map_in_place() && (input_repeat(BTN_L) || input_repeat(BTN_R))) {
+            int ti = tab_index(tab) + (input_held(BTN_R) ? 1 : -1);
+            if (ti >= 0 && ti < ntabs) {
+                tab = tabs[ti];
+                map_tab_leave();
+                build_view();
+                scroll = scroll_target = 0;
+                keep_visible();
+                scroll = scroll_target;
+                sound_play(SFX_HOVER);
+            }
+            return;
+        }
+        if (map_update() == MAP_EXIT) {
+            sound_play(SFX_BACK);
+            app_back_to_cube(SIDE_ALBUM);
+        }
+        return;
+    }
     int n = item_count();
     int d = input_dir();
     int s = sel();
@@ -196,10 +224,19 @@ static void album_draw(float open) {
         snprintf(right, sizeof(right), "for %s", g);
     } else if (tab == TAB_FOLDERS && folder_open < 0) {
         snprintf(right, sizeof(right), "%d folders", photos_folder_count());
+    } else if (tab == TAB_MAP) {
+        map_title(right, sizeof(right));
+        if (map_in_place()) title = map_place_title();
     } else {
         snprintf(right, sizeof(right), "%s \x7f %d photo%s", g_view_name, g_view_count, g_view_count == 1 ? "" : "s");
     }
     ui_ptitle(X + 22, 18, UI_W - 44, title, right, pa);
+    if (tab == TAB_MAP && !photos_scanning()) {
+        if (!map_in_place()) draw_tabs(X + (UI_W - (COLS * CW + (COLS - 1) * GX)) / 2 - 4, 58, pa);
+        float swirl = ui_swirl_duration(COLS * ROWS);
+        map_draw(X, pa, ramp(open, swirl - 0.5f, swirl - 0.1f), ramp(open, swirl - 0.4f, swirl));
+        return;
+    }
     float gridw = COLS * CW + (COLS - 1) * GX;
     float x0 = X + (UI_W - gridw) / 2, y0 = 96;
     if (!photos_scanning()) draw_tabs(x0 - 4, 58, pa);

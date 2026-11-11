@@ -55,13 +55,53 @@ static void copy_ascii(char *out, size_t cap, const uint8_t *s, uint32_t n) {
     out[k] = 0;
 }
 
+/* Degrees from three RATIONALs (degrees, minutes, seconds) at tiff[off]. */
+static bool gps_dms(const uint8_t *tiff, uint32_t len, uint32_t off, bool le, float *out) {
+    if (off + 24 > len) return false;
+    double v = 0, scale = 1;
+    for (int i = 0; i < 3; i++) {
+        uint32_t num = rd32(tiff + off + i * 8, le), den = rd32(tiff + off + i * 8 + 4, le);
+        if (den) v += (double)num / den / scale;
+        scale *= 60;
+    }
+    *out = (float)v;
+    return true;
+}
+
+/* The GPS IFD: where the photo was taken, if the camera knew. */
+static void parse_gps(const uint8_t *tiff, uint32_t len, uint32_t ifd, bool le, PicInfo *info) {
+    if (ifd + 2 > len) return;
+    int n = rd16(tiff + ifd, le);
+    if (n > 200 || ifd + 2 + (uint32_t)n * 12 > len) return;
+    char lat_ref = 'N', lon_ref = 'E';
+    float lat = 0, lon = 0;
+    bool have_lat = false, have_lon = false;
+    for (int i = 0; i < n; i++) {
+        const uint8_t *e = tiff + ifd + 2 + i * 12;
+        uint16_t tag = rd16(e, le), type = rd16(e + 2, le);
+        uint32_t count = rd32(e + 4, le), val = rd32(e + 8, le);
+        if (tag == 1 && type == 2) lat_ref = (char)e[8];
+        else if (tag == 3 && type == 2) lon_ref = (char)e[8];
+        else if (tag == 2 && type == 5 && count == 3) have_lat = gps_dms(tiff, len, val, le, &lat);
+        else if (tag == 4 && type == 5 && count == 3) have_lon = gps_dms(tiff, len, val, le, &lon);
+    }
+    if (!have_lat || !have_lon) return;
+    if (lat_ref == 'S') lat = -lat;
+    if (lon_ref == 'W') lon = -lon;
+    /* 0,0 is what some phones write when they had no fix */
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180 || (fabsf(lat) < 0.0001f && fabsf(lon) < 0.0001f)) return;
+    info->has_gps = true;
+    info->lat = lat;
+    info->lon = lon;
+}
+
 /* Parses the EXIF block (a TIFF structure) at tiff[0..len). */
 static void parse_exif(const uint8_t *tiff, uint32_t len, uint32_t file_off, PicInfo *info) {
     if (len < 8) return;
     bool le = tiff[0] == 'I';
     if (!(tiff[0] == 'I' && tiff[1] == 'I') && !(tiff[0] == 'M' && tiff[1] == 'M')) return;
     uint32_t ifd = rd32(tiff + 4, le);
-    uint32_t exif_ifd = 0;
+    uint32_t exif_ifd = 0, gps_ifd = 0;
     for (int which = 0; which < 3 && ifd && ifd + 2 <= len; which++) {
         int n = rd16(tiff + ifd, le);
         if (n > 500 || ifd + 2 + (uint32_t)n * 12 > len) break;
@@ -77,6 +117,7 @@ static void parse_exif(const uint8_t *tiff, uint32_t len, uint32_t file_off, Pic
                     if (count <= 4) copy_ascii(info->camera, sizeof(info->camera), e + 8, count);
                     else if (val + count <= len) copy_ascii(info->camera, sizeof(info->camera), tiff + val, count);
                 } else if (tag == 0x8769) exif_ifd = val;
+                else if (tag == 0x8825) gps_ifd = val;
             } else if (which == 1) {    /* IFD1: the thumbnail */
                 if (tag == 0x0201) thumb_off = val;
                 else if (tag == 0x0202) thumb_len = val;
@@ -99,6 +140,7 @@ static void parse_exif(const uint8_t *tiff, uint32_t len, uint32_t file_off, Pic
             break;
         }
     }
+    if (gps_ifd) parse_gps(tiff, len, gps_ifd, le, info);
 }
 
 bool pic_info(const char *path, PicInfo *info) {

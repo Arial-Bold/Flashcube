@@ -1,5 +1,6 @@
 /* photos.c - see photos.h. */
 #include "photos.h"
+#include "geo.h"
 #include "storage.h"
 #include "aramcache.h"
 #include "applog.h"
@@ -585,7 +586,9 @@ static void make_thumb(Thumb *t, uint32_t key, const char *path) {
             ok = true;
         } else {
             PicInfo info;
-            if (pic_info(path, &info) && pic_make_thumb(path, &info, tex)) {
+            bool got = pic_info(path, &info);
+            if (got) geo_note(key, &info);
+            if (got && pic_make_thumb(path, &info, tex)) {
                 memset(hd, 0, sizeof(*hd));
                 memcpy(hd->magic, "FCT1", 4);
                 int w, h;
@@ -666,6 +669,7 @@ static void *worker_main(void *arg) {
         thr_unlock(&lock);
         if (pr) { do_picture(pr); continue; }
         if (best) { make_thumb(best, key, path); continue; }
+        if (geo_work()) continue;   /* nothing else to do: where were photos taken? */
         worker_wake = false;
         for (int i = 0; i < 50 && !worker_wake; i++) thr_sleep_ms(4);
     }

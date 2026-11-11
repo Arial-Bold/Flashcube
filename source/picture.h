@@ -22,6 +22,8 @@ typedef struct {
     bool progressive;
     bool is_jpeg;
     bool orientation_set;    /* (EXIF block seen) */
+    bool has_gps;            /* where it was taken (EXIF GPS), in degrees */
+    float lat, lon;          /* north and east are positive */
 } PicInfo;
 
 /* Reads the start of the file: dimensions, EXIF orientation/date/camera. */
