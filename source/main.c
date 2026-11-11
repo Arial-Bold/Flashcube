@@ -10,6 +10,7 @@
 #include "diag.h"
 #include "photos.h"
 #include "geo.h"
+#include "mapland.h"
 #include "sound.h"
 #include "midi.h"
 #include "menumusic.h"
@@ -206,6 +207,7 @@ void app_init(void) {
     midi_init();
     menumusic_init();
     geo_init();            /* before the photo thread, which tells it places */
+    mapland_init();
     photos_init();
     photos_on_insert = photo_inserted;
     if (!sd) app_log("no SD card");

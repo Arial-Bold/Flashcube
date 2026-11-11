@@ -16,6 +16,7 @@ typedef struct { uint32_t key; float lat, lon; uint8_t state; } GeoEntry;
 static GeoEntry *table;
 static int nentries;
 
+#define PLACES_HEADER "# places 2"
 static thr_mutex lock;
 static bool dirty;
 static unsigned generation;
@@ -72,6 +73,9 @@ static void load(void) {
     storage_path(path, sizeof(path), "places.dat");
     char *text = storage_read(path, NULL);
     if (!text) return;
+    /* "no place" answers from an older reader are asked again (it reads
+     * more kinds of photo now) */
+    bool current = !strncmp(text, PLACES_HEADER, strlen(PLACES_HEADER));
     for (char *line = text; line && *line;) {
         char *next = strchr(line, '\n');
         if (next) *next++ = 0;
@@ -79,7 +83,7 @@ static void load(void) {
         float lat, lon;
         thr_lock(&lock);
         if (sscanf(line, "%x %f %f", &key, &lat, &lon) == 3) put(key, true, lat, lon);
-        else if (sscanf(line, "%x -", &key) == 1) put(key, false, 0, 0);
+        else if (current && sscanf(line, "%x -", &key) == 1) put(key, false, 0, 0);
         thr_unlock(&lock);
         line = next;
     }
@@ -94,6 +98,7 @@ static void save(void) {
     size_t cap = (size_t)n * 32 + 64, len = 0;
     char *buf = malloc(cap);
     if (!buf) return;
+    len += (size_t)snprintf(buf, cap, "%s\n", PLACES_HEADER);
     thr_lock(&lock);
     for (int i = 0; i < n && len < cap - 40; i++) {
         uint32_t key = photos_key_of(i);

@@ -1,6 +1,7 @@
 /* map.c - see map.h. */
 #include "map.h"
 #include "map_data.h"
+#include "mapland.h"
 #include "geo.h"
 #include "app.h"
 #include "photos.h"
@@ -15,7 +16,6 @@
 
 static const Color GOLD = { 0xe8, 0xcf, 0x4a, 255 };
 static const Color GOLD_EDGE = { 0x6a, 0x5a, 0x10, 255 };
-static const Color DOT = { 120, 146, 255, 120 };
 static const Color TEXT = { 0xee, 0xf1, 0xf6, 255 };
 static const Color LABEL = { 0x73, 0x92, 0xff, 255 };
 static const Color INK = { 0x1a, 0x16, 0x08, 255 };
@@ -249,6 +249,7 @@ static void pin_name(int pin, char *out, size_t cap) {
 /* ------------------------------------------------------------ one place's photos */
 
 static bool in_place;
+static LandPic mini;     /* the place view's little map */
 static char place_title[48];
 static float place_lat, place_lon;
 static uint32_t *place_keys;     /* its photos, by key (the library can change under it) */
@@ -319,7 +320,7 @@ void map_tab_enter(void) {
     make_pins();
 }
 
-void map_tab_leave(void) { in_place = false; }
+void map_tab_leave(void) { in_place = false; mapland_free(&mini); }
 bool map_in_place(void) { return in_place; }
 
 /* The pin to go to from pin `from` in direction d (nearest that way). */
@@ -470,33 +471,26 @@ static void well(float x, float y, float w, float h, float al) {
     gfx_rect(x, y, w, h, rgba(0x0b, 0x0f, 0x12, (u8)(255 * al)));
 }
 
-/* Land as a grid of dots, fixed to the world so they move with it. The
- * grid's step halves or doubles to keep the dots 4 to 8 pixels apart. */
-static void draw_land(float x, float y, float w, float h, float lat_c, float lon_c, float s, float al) {
-    float step = 2.5f;
-    while (step * s > 7.5f) step *= 0.5f;
-    while (step * s < 3.75f) step *= 2;
-    float sp = step * s;
-    float dot = fminf(2.6f, sp * 0.5f);
-    Color c = color_alpha(DOT, al);
-    bool fine = step < 1.0f / MAP_RES;   /* closer than the data: smooth its edges */
-    float lon0 = lon_c - (w / 2) / s, lat0 = lat_c + (h / 2) / s;
-    int i0 = (int)floorf(lon0 / step), j0 = (int)floorf(-lat0 / step);
-    int ni = (int)(w / sp) + 2, nj = (int)(h / sp) + 2;
-    for (int j = j0; j < j0 + nj; j++) {
-        float lat = -(j + 0.5f) * step;
-        if (lat > MAP_LAT_TOP || lat < MAP_LAT_BOTTOM) continue;
-        float py = y + h / 2 - (lat - lat_c) * s;
-        if (py < y || py > y + h) continue;
-        for (int i = i0; i < i0 + ni; i++) {
-            float lon = (i + 0.5f) * step;
-            if (lon < -180 || lon >= 180) continue;
-            float px = x + w / 2 + (lon - lon_c) * s;
-            if (px < x || px > x + w) continue;
-            if (fine ? map_is_land_smooth(lat, lon) : map_is_land(lat, lon)) gfx_rect(px - dot / 2, py - dot / 2, dot, dot, c);
-        }
+/* The land: a picture of the view drawn by mapland.c, asked for again
+ * when the view has moved on (at once when it settles, and now and then
+ * while it keeps moving). Meanwhile the last one moves along with it. */
+#define LAND_MARGIN 64
+static float land_asked;
+static void keep_land_fresh(void) {
+    float s = px_per_deg(zoom);
+    const LandPic *cur = mapland_current();
+    land_asked += g_dt;
+    if (mapland_busy()) return;
+    int w = (int)WW + LAND_MARGIN * 2, h = (int)WH + LAND_MARGIN * 2;
+    if (cur && cur->w == w && cur->h == h && fabsf(cur->s - s) < s * 0.004f &&
+        fabsf(cur->lon - clon) * s < 1 && fabsf(cur->lat - clat) * s < 1) return;   /* (up to date) */
+    bool settled = fabsf(zoom - zoom_to) < zoom * 0.005f && fabsf(clat - tlat) * s < 0.5f && fabsf(clon - tlon) * s < 0.5f;
+    if (!cur || settled || land_asked > 0.4f) {
+        mapland_request(w, h, clat, clon, s);
+        land_asked = 0;
     }
 }
+
 
 static void count_text(int n, char *out, size_t cap) {
     if (n > 999) snprintf(out, cap, "%dk", n / 1000);
@@ -561,7 +555,8 @@ static void draw_place(float X, float pa, float da, float ha) {
     if (lo < -180 + half_w) lo = -180 + half_w;
     if (lo > 180 - half_w) lo = 180 - half_w;
     gfx_set_clip(mx, my, mw, mh);
-    draw_land(mx, my, mw, mh, la, lo, s, pa);
+    if (!mini.ready || mini.lat != la || mini.lon != lo) mapland_draw_now(&mini, (int)mw, (int)mh, la, lo, s);
+    mapland_show(&mini, mx, my, mw, mh, la, lo, s, pa);
     float lx = mx + mw / 2 + (place_lon - lo) * s, ly = my + mh / 2 - (place_lat - la) * s;
     gfx_circle(lx, ly, 6, color_alpha(GOLD_EDGE, pa));
     gfx_circle(lx, ly, 4.5f, color_alpha(GOLD, pa));
@@ -636,7 +631,8 @@ void map_draw(float X, float pa, float da, float ha) {
     if (in_place) { draw_place(X, pa, da, ha); return; }
     well(WX, WY, WW, WH, pa);
     gfx_set_clip(WX, WY, WW, WH);
-    draw_land(WX, WY, WW, WH, clat, clon, px_per_deg(zoom), pa);
+    keep_land_fresh();
+    mapland_show(mapland_current(), WX, WY, WW, WH, clat, clon, px_per_deg(zoom), pa);
     int sp = selected_pin();
     bool photos_on = zoom >= PIN_ZOOM;
     for (int j = 0; j < npins; j++) {

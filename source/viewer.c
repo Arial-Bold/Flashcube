@@ -4,6 +4,7 @@
  * D-pad, Z for the whole screen. */
 #include "app.h"
 #include "photos.h"
+#include "geo.h"
 #include "picture.h"
 #include "ui.h"
 #include "input.h"
@@ -316,10 +317,10 @@ static void viewer_draw(float open) {
 
     /* information */
     if (info_on && p && ua > 0) {
-        float iw = 324, ih = 196, ix = X + 150 + (UI_W - 268) / 2 - iw / 2, iy = 60;
+        float iw = 324, ih = 221, ix = X + 150 + (UI_W - 268) / 2 - iw / 2, iy = 60;
         ui_panel(ix, iy, iw, ih, ua);
         ui_ptitle(ix, iy, iw, "Information", NULL, ua);
-        char v[6][160], date[24];
+        char v[7][160], date[24];
         photos_format_date(p, date, sizeof(date));
         const Folder *f = photos_folder(p->folder);
         snprintf(v[0], 160, "%s", p->name);   /* (long names scroll) */
@@ -329,8 +330,19 @@ static void viewer_draw(float open) {
         if (p->size >= 1048576) snprintf(v[4], 160, "%.1f MB", p->size / 1048576.0);
         else snprintf(v[4], 160, "%u KB", (unsigned)((p->size + 1023) / 1024));
         snprintf(v[5], 160, "%s", f ? f->name : "-");
-        static const char *lab[6] = { "Name", "Taken", "Camera", "Size", "File", "Folder" };
-        for (int i = 0; i < 6; i++) {
+        /* where it was taken: says plainly when the photo doesn't say (phones
+         * often take the place out of photos they share or send) */
+        if (req.state != 2) snprintf(v[6], 160, "-");
+        else if (!req.pic.info.has_gps) snprintf(v[6], 160, "Not saved in this photo");
+        else {
+            char name[64], at[40];
+            geo_place_name(req.pic.info.lat, req.pic.info.lon, name, sizeof(name));
+            geo_format_coords(req.pic.info.lat, req.pic.info.lon, at, sizeof(at));
+            if (strcmp(name, at)) snprintf(v[6], 160, "%s (%s)", name, at);
+            else snprintf(v[6], 160, "%s", at);
+        }
+        static const char *lab[7] = { "Name", "Taken", "Camera", "Size", "File", "Folder", "Place" };
+        for (int i = 0; i < 7; i++) {
             float y = iy + 40 + i * 25;
             ui_text(FONT_MENU, 13, 1.2f, ix + 16, y, 22, rgba(0x73, 0x92, 0xff, (u8)(255 * ua)), lab[i]);
             ui_text_fit_scroll(FONT_MENU, 13, 1, ix + 100, y, iw - 116, 22, rgba(0xee, 0xf1, 0xf6, (u8)(255 * ua)), v[i]);

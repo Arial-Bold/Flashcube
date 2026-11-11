@@ -14,6 +14,11 @@
 
 extern const uint8_t map_land_bits[MAP_COLS / 8 * MAP_ROWS];
 
+/* Cells (row, column) where two separate landmasses touch, such as
+ * Greenland and Ellesmere Island: drawn as water so they stay apart. */
+extern const uint16_t map_moat[][2];
+extern const int map_nmoat;
+
 typedef struct {
     int16_t lat, lon;       /* hundredths of a degree */
     uint16_t pop_k;         /* population in thousands */

@@ -55,13 +55,15 @@ static void copy_ascii(char *out, size_t cap, const uint8_t *s, uint32_t n) {
     out[k] = 0;
 }
 
-/* Degrees from three RATIONALs (degrees, minutes, seconds) at tiff[off]. */
-static bool gps_dms(const uint8_t *tiff, uint32_t len, uint32_t off, bool le, float *out) {
-    if (off + 24 > len) return false;
+/* Degrees from up to three RATIONALs (degrees, minutes, seconds) at
+ * tiff[off]; some cameras write signed ones, or leave the seconds off. */
+static bool gps_dms(const uint8_t *tiff, uint32_t len, uint32_t off, uint32_t count, bool le, bool sign, float *out) {
+    if (count < 1 || count > 3 || off + count * 8 > len) return false;
     double v = 0, scale = 1;
-    for (int i = 0; i < 3; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         uint32_t num = rd32(tiff + off + i * 8, le), den = rd32(tiff + off + i * 8 + 4, le);
-        if (den) v += (double)num / den / scale;
+        double n = sign ? (double)(int32_t)num : (double)num, d = sign ? (double)(int32_t)den : (double)den;
+        if (d != 0) v += fabs(n / d) / scale;
         scale *= 60;
     }
     *out = (float)v;
@@ -80,14 +82,14 @@ static void parse_gps(const uint8_t *tiff, uint32_t len, uint32_t ifd, bool le, 
         const uint8_t *e = tiff + ifd + 2 + i * 12;
         uint16_t tag = rd16(e, le), type = rd16(e + 2, le);
         uint32_t count = rd32(e + 4, le), val = rd32(e + 8, le);
-        if (tag == 1 && type == 2) lat_ref = (char)e[8];
-        else if (tag == 3 && type == 2) lon_ref = (char)e[8];
-        else if (tag == 2 && type == 5 && count == 3) have_lat = gps_dms(tiff, len, val, le, &lat);
-        else if (tag == 4 && type == 5 && count == 3) have_lon = gps_dms(tiff, len, val, le, &lon);
+        if (tag == 1 && type == 2) lat_ref = (char)(count <= 4 ? e[8] : (val < len ? tiff[val] : 'N'));
+        else if (tag == 3 && type == 2) lon_ref = (char)(count <= 4 ? e[8] : (val < len ? tiff[val] : 'E'));
+        else if (tag == 2 && (type == 5 || type == 10)) have_lat = gps_dms(tiff, len, val, count, le, type == 10, &lat);
+        else if (tag == 4 && (type == 5 || type == 10)) have_lon = gps_dms(tiff, len, val, count, le, type == 10, &lon);
     }
     if (!have_lat || !have_lon) return;
-    if (lat_ref == 'S') lat = -lat;
-    if (lon_ref == 'W') lon = -lon;
+    if (lat_ref == 'S' || lat_ref == 's') lat = -lat;
+    if (lon_ref == 'W' || lon_ref == 'w') lon = -lon;
     /* 0,0 is what some phones write when they had no fix */
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180 || (fabsf(lat) < 0.0001f && fabsf(lon) < 0.0001f)) return;
     info->has_gps = true;
