@@ -41,22 +41,36 @@ for f in g['features']:
         big += 1
         areas.append(area(poly[0]))
         di.polygon([((p[0] + 180) * RES, (LAT0 - p[1]) * RES) for p in poly[0]], fill=big)
-idp = ids.load()
-moat = []
-for y in range(H):
-    for x in range(W):
-        a = idp[x, y]
-        if not a: continue
-        hit = False
-        for dy in (-1, 0, 1):
-            for dx in (-1, 0, 1):
-                xx, yy = (x + dx) % W, y + dy
-                if 0 <= yy < H:
-                    b = idp[xx, yy]
-                    # (only where one side is a continent-sized piece, so
-                    # island groups may still run together into one shape)
-                    if b and b != a and max(areas[a], areas[b]) > 150: hit = True
-        if hit: moat.append((y, x))
+# Marked: land cells touching another landmass, and the water in straits
+# (up to about 1.5 degrees wide) between two of them. At least one of the
+# two must be continent-sized, so island groups may still run together.
+import numpy as np
+from scipy import ndimage
+idarr = np.array(ids, dtype=np.int32)
+R = 6
+yy, xx = np.mgrid[-R:R + 1, -R:R + 1]
+disk = (xx * xx + yy * yy) <= R * R
+near_big = np.zeros((H, W), np.int32)      # how many continent-sized pieces are near
+near_any = np.zeros((H, W), np.int32)      # how many pieces of any size are near
+for i in range(1, big + 1):
+    m = idarr == i
+    if not m.any(): continue
+    ys, xs = np.nonzero(m)
+    y0, y1 = max(ys.min() - R, 0), min(ys.max() + R + 1, H)
+    x0, x1 = max(xs.min() - R, 0), min(xs.max() + R + 1, W)
+    sub = ndimage.binary_dilation(m[y0:y1, x0:x1], structure=disk)
+    near_any[y0:y1, x0:x1] += sub
+    if areas[i] > 150: near_big[y0:y1, x0:x1] += sub
+water = idarr == 0
+strait = water & (near_any >= 2) & (near_big >= 1)
+# land right at a join
+areas_np = np.array(areas, dtype=np.float64)
+touch = np.zeros((H, W), bool)
+for dy in (-1, 0, 1):
+    for dx in (-1, 0, 1):
+        sh = np.roll(np.roll(idarr, dy, 0), dx, 1)
+        touch |= (idarr > 0) & (sh > 0) & (sh != idarr) & (np.maximum(areas_np[idarr], areas_np[sh]) > 150)
+moat = [(int(y), int(x)) for y, x in zip(*np.nonzero(strait | touch))]
 pix = img.load()
 rowbytes = W // 8
 bits = bytearray(rowbytes * H)
