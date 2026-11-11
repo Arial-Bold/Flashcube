@@ -127,6 +127,8 @@ int main(int argc, char **argv) {
         press(BTN_A); run(60); shot("p5_place");
         press(BTN_RIGHT); run(10); shot("p5b_place_sel");
         press(BTN_A); run(120); shot("p6_viewer");
+        press(BTN_DOWN); press(BTN_DOWN); press(BTN_A); run(30); shot("p6b_viewer_info");
+        press(BTN_B); run(10);
         press(BTN_B); run(60); shot("p7_back_place");
         press(BTN_B); run(30); shot("p8_back_map");
         press(BTN_B); run(60); shot("p9_world_again");
