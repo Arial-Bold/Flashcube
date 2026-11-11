@@ -12,12 +12,13 @@ Flashcube is homebrew. Download the latest `flashcube` zip from [Releases](https
 - Original menu sounds, and Flashcube's own slow, airy background music. Both are made by the GameCube as it runs.
 
 ### Album
-- All your photos as a grid of thumbnails, with tabs for **All**, each **year**, **Folders** and **Favorites**.
+- All your photos as a grid of thumbnails, with tabs for **All**, each **year**, **Folders**, **Favorites** and **Map**.
 - Thumbnails appear quickly, even for big photos, and are remembered so each photo is only read once.
+- **Map:** photos on a map of the world by where they were taken (phones save the place with each photo when the camera may use location). Gold pins show how many photos are in each spot; zoom in with the C-stick or A and the pins split apart and show a photo. A on a place shows its photos, with a small map, when they were taken and the town or city nearby. Y starts a slideshow of a pin's photos.
 
 ### Photo viewer
 - Each photo sits in a frame shaped like the photo, with a film strip of the photos either side.
-- Zoom up to 4x with L/R and move around with the stick. Z switches to full screen.
+- Zoom up to 4x with the C-stick (or L/R) and move around with the stick. Z switches to full screen.
 - The photo menu:
   - **Rotate** the photo.
   - **Information:** date, camera, size, file and folder.
@@ -96,7 +97,7 @@ sd:/apps/flashcube/       Flashcube's own folder:
     opening.bnr              its banner and description in launchers
     cacert.pem               certificates for checking GitHub for updates
     README.txt
-    settings.ini, favorites.txt, index.dat, puzzle.txt, thumbs/   (made automatically)
+    settings.ini, favorites.txt, index.dat, places.dat, puzzle.txt, thumbs/   (made automatically)
 sd:/boot.dol              started by Exit (usually your launcher)
 ```
 
@@ -108,7 +109,8 @@ JPEG, PNG, BMP and GIF photos are shown.
 |---|---|
 | Cube | Stick: turn to a side · A: open it · B: turn back (on the front, B twice: exit) · START: Settings · Z: a new version, when there is one |
 | Album | Stick or D-pad: select · L/R: tabs · A: open · Y: slideshow · B: back |
-| Viewer | D-pad left/right: previous/next · D-pad up/down + A: photo menu · L/R: zoom · Stick or C-stick: move · Z: full screen · B: back |
+| Map | Stick or D-pad: choose a pin · C-stick: zoom · A: zoom in / open a place · Y: slideshow (zoomed in) · B: zoom out, then back |
+| Viewer | D-pad left/right: previous/next · D-pad up/down + A: photo menu · C-stick or L/R: zoom · Stick: move · Z: full screen · B: back |
 | Slideshow | A: pause · D-pad left/right: previous/next · X: music player · B: stop |
 | Photo Puzzle | D-pad: choose a tile · A: slide it · hold Z: peek · X: size · Y: shuffle |
 | Doodle | Stick: move · hold A: draw · X: colour · Y: brush · L: undo · R twice: clear · START: save |
@@ -150,6 +152,7 @@ The memory card is only read; nothing on it is changed. Snapshots already on the
 - **QR Code generator library**, (C) Project Nayuki, MIT licence.
 - The Melee snapshot format was worked out from the community **doldecomp/melee** decompilation project; no game code or data is included.
 - **stb_image and stb_image_write**, Sean Barrett, public domain.
+- **Natural Earth** map data (land and city names for the photo map), public domain.
 - **mbedTLS**, Apache 2.0 licence.
 - **cacert.pem:** Mozilla's certificate list, MPL 2.0.
 - **M PLUS fonts**, (C) The M+ FONTS Project Authors, SIL Open Font License 1.1.
