@@ -123,7 +123,7 @@ JPEG, PNG, BMP and GIF photos are shown.
 
 - **Sending photos:** photos you send appear in the album at once and are stored in `DCIM/100FLASH`. iPhones turn their photos into JPEGs as they send them.
 - **Saving photos:** tap a photo on the page, then press and hold it to save it to your phone, or tick several and use **Save**.
-- **Fixed address:** to use one instead of DHCP, set `net.dhcp=0`, `net.ip`, `net.netmask` and `net.gateway` in `sd:/flashcube/settings.ini`.
+- **Fixed address:** to use one instead of DHCP, set `net.dhcp=0`, `net.ip`, `net.netmask` and `net.gateway` in `sd:/apps/flashcube/settings.ini`.
 
 ## Saving Melee snapshots
 
