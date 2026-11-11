@@ -34,6 +34,8 @@ int main(int argc, char **argv) {
         press(BTN_B); run(10);
         input_test_state(BTN_R, 0, 0, 0, 1); run(40); input_test_state(0, 0.6f, 0.3f, 0, 0); run(30); input_test_state(0, 0, 0, 0, 0); run(10);
         shot("09_viewer_zoom");
+        input_test_cstick(0, -1); run(30); shot("09b_viewer_czoom_in");   /* C-stick up: closer, knob leans up */
+        input_test_cstick(0, 1); run(20); shot("09d_viewer_czoom_down"); run(70); input_test_cstick(0, 0); run(10); shot("09c_viewer_czoom_out");
         press(BTN_Z); run(40); shot("10_viewer_full");
         press(BTN_B); run(20); press(BTN_B); run(30); shot("11_back_album");
         press(BTN_Y); run(60); shot("12_slide_setup");
@@ -112,6 +114,23 @@ int main(int argc, char **argv) {
         run(400); shot("k6_saved");
         press(BTN_UP); run(5); press(BTN_A); run(60); shot("k7_slot_b");
         press(BTN_B); run(80); shot("k8_cube");
+    } else if (!strcmp(script, "map")) {
+        hold(0, 0, -1, 70);
+        press(BTN_A); run(160);
+        for (int i = 0; i < 8; i++) { hold(BTN_R, 0, 0, 2); run(6); }
+        run(20); shot("p0_map_reading");
+        run(600); shot("p1_map_world");
+        press(BTN_A); run(60); shot("p2_map_zoomed");
+        press(BTN_LEFT); run(30); shot("p3_map_zoomed_left");
+        input_test_cstick(0, -1); run(40); input_test_cstick(0, 0); run(40); shot("p4_map_czoom");
+        press(BTN_RIGHT); run(30); shot("p4b_map_czoom_right");
+        press(BTN_A); run(60); shot("p5_place");
+        press(BTN_RIGHT); run(10); shot("p5b_place_sel");
+        press(BTN_A); run(120); shot("p6_viewer");
+        press(BTN_B); run(60); shot("p7_back_place");
+        press(BTN_B); run(30); shot("p8_back_map");
+        press(BTN_B); run(60); shot("p9_world_again");
+        press(BTN_B); run(80); shot("p10_cube");
     } else if (!strcmp(script, "serve")) {
         hold(0, -1, 0, 70);
         press(BTN_A);
